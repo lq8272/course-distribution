@@ -1,0 +1,17 @@
+# ============================================================
+# MySQL 字符集配置
+# MySQL 8.0 可通过配置文件设置的字符集变量只有：
+#   init_connect, character-set-server, collation-server
+# 其余（character_set_client/connection/results）只能通过 SET NAMES 设置
+# ============================================================
+
+[mysqld]
+init_connect = 'SET NAMES utf8mb4'
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+[client]
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4

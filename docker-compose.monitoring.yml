@@ -1,0 +1,61 @@
+# ============================================================
+# docker-compose.monitoring.yml — 监控服务（Prometheus + Grafana）
+#
+# 使用方式：
+#   开发环境：docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#   生产环境：docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.monitoring.yml --profile monitoring up -d
+#
+# 访问地址：
+#   Prometheus: http://localhost:9090
+#   Grafana:   http://localhost:3001 (admin / admin123)
+# ============================================================
+
+services:
+  # --------------- Prometheus 指标采集 ---------------
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: course_prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - default
+
+  # --------------- Grafana 可视化看板 ---------------
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: course_grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./docker/monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./docker/monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in production}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    networks:
+      - default
+
+volumes:
+  prometheus_data:
+  grafana_data:

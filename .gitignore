@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.jar
+*.war
+
+# Environment files
+.env
+.env.local
+.env.*.local
+# Backend prod env (contains real secrets - never commit)
+backend/.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Docker
+.dockerignore
+
+# Uni-app
+unpackage/
+
+# Test coverage
+coverage/

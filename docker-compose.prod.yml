@@ -1,0 +1,66 @@
+# ============================================================
+# docker-compose.prod.yml — 生产环境覆盖配置
+#
+# 使用方式：
+#   NODE_ENV=production docker-compose -f docker-compose.yml -f docker-compose.prod.yml --profile production up -d
+#
+# 必须先设置环境变量（或在 .env 中配置）：
+#   - JWT_SECRET          JWT 签名密钥（必填，必须足够随机）
+#   - JWT_REFRESH_SECRET  Refresh Token 密钥（必填）
+#   - MYSQL_ROOT_PASSWORD MySQL 密码（必填）
+#   - CORS_ORIGINS        允许的来源域名（必填，如 https://wx.example.com）
+#   - PROMO_BASE_URL      推广落地页域名（必填，如 https://wx.example.com）
+#   - QINIU_SECRET_KEY   七牛云 SK（必填）
+#   - SSL 证书文件放入 ./docker/nginx/ssl/（可选，无则 Nginx 降级为 HTTP）
+# ============================================================
+
+services:
+  backend:
+    profiles:
+      - production
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 必须设置}
+      DB_NAME: ${MYSQL_DATABASE:-course_distribute}
+      DB_POOL_SIZE: 50
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须设置}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须设置}
+      JWT_EXPIRES_IN: 1h
+      JWT_REFRESH_EXPIRES_IN: 7d
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS 必须设置}
+      PROMO_BASE_URL: ${PROMO_BASE_URL:?PROMO_BASE_URL 必须设置}
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY:-}
+      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY:?QINIU_SECRET_KEY 必须设置}
+      QINIU_BUCKET_IMAGE: ${QINIU_BUCKET_IMAGE:-}
+      QINIU_BUCKET_VIDEO: ${QINIU_BUCKET_VIDEO:-}
+      QINIU_PUBLIC_DOMAIN: ${QINIU_PUBLIC_DOMAIN:-}
+      QINIU_URL_EXPIRE: 3600
+    volumes:
+      # 注意：./backend:/app 仍然保留（开发时代码热更新），但生产建议去掉
+      # 只保留命名卷保护 node_modules
+      - backend_node_modules:/app/node_modules
+
+  nginx:
+    profiles:
+      - production
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # SSL 证书（放入 ./docker/nginx/ssl/ 目录后取消注释）
+      # - ./docker/nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      # - ./docker/nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      # 前端构建产物（H5 webview 版，deploy.sh 构建后才有内容）
+      - ./frontend/dist/build/mp-weixin:/var/www/html:ro
