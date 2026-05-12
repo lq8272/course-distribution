@@ -65,16 +65,16 @@ jobs:
           NODE_ENV: test
           DB_HOST: 127.0.0.1
           DB_USER: root
-          DB_PASSWORD: root123
+          DB_PASSWORD: rootpassword
           REDIS_HOST: 127.0.0.1
 
       - name: Start backend server for tests
         run: |
           node src/index.js &
           echo "Waiting for backend to be ready..."
-          for i in {1..15}; do
+          for i in {1..20}; do
             curl -sf http://localhost:3000/api/health && echo "" && echo "Backend ready" && break
-            echo "Backend not ready, waiting... ($i/15)"
+            echo "Backend not ready, waiting... ($i/20)"
             sleep 2
           done
         working-directory: backend
@@ -82,7 +82,7 @@ jobs:
           NODE_ENV: test
           DB_HOST: 127.0.0.1
           DB_USER: root
-          DB_PASSWORD: root123
+          DB_PASSWORD: rootpassword
           REDIS_HOST: 127.0.0.1
 
       - name: Run Jest tests
@@ -92,7 +92,7 @@ jobs:
           NODE_ENV: test
           TEST_API: http://localhost:3000/api/v1
           DB_HOST: 127.0.0.1
-          DB_PASSWORD: root123
+          DB_PASSWORD: rootpassword
           REDIS_HOST: 127.0.0.1
 
       - name: Upload Jest report
@@ -209,17 +209,19 @@ jobs:
 
       - name: Install deps and start backend
         run: |
-          npm ci --legacy-peer-deps
-          npm run dev &
-          BACKEND_PID=$!
-          echo "Backend PID: $BACKEND_PID"
-          for i in {1..30}; do
-            curl -s http://localhost:3000/api/health && break
+          npm ci --legacy-peer-deps --include=dev
+          node src/index.js &
+          for i in {1..20}; do
+            curl -sf http://localhost:3000/api/health && echo "Backend ready" && break
             sleep 2
           done
         working-directory: backend
         env:
           NODE_ENV: test
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: rootpassword
+          REDIS_HOST: 127.0.0.1
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
