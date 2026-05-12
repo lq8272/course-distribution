@@ -65,8 +65,8 @@ jobs:
           NODE_ENV: test
           DB_HOST: 127.0.0.1
           DB_USER: root
-          DB_PASSWORD: rootpassword
-          REDIS_HOST: redis
+          DB_PASSWORD: root123
+          REDIS_HOST: 127.0.0.1
 
       - name: Start backend server for tests
         run: |
@@ -82,18 +82,18 @@ jobs:
           NODE_ENV: test
           DB_HOST: 127.0.0.1
           DB_USER: root
-          DB_PASSWORD: rootpassword
-          REDIS_HOST: redis
+          DB_PASSWORD: root123
+          REDIS_HOST: 127.0.0.1
 
       - name: Run Jest tests
         run: npm test -- --no-cache --forceExit
         working-directory: backend
         env:
           NODE_ENV: test
-          TEST_API: http://localhost:3000/api
+          TEST_API: http://localhost:3000/api/v1
           DB_HOST: 127.0.0.1
-          DB_PASSWORD: rootpassword
-          REDIS_HOST: redis
+          DB_PASSWORD: root123
+          REDIS_HOST: 127.0.0.1
 
       - name: Upload Jest report
         if: always()
