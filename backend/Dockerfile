@@ -5,7 +5,7 @@ RUN apk add --no-cache curl mysql-client
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --registry=https://registry.npmmirror.com
+RUN npm install --registry=https://registry.npmjs.org
 
 COPY . .
 

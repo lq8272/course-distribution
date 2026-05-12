@@ -20,7 +20,7 @@ WORKDIR /app
 
 # 安装依赖（使用国内镜像加速）
 COPY package*.json ./
-RUN npm ci --registry=https://registry.npmmirror.com
+RUN npm ci --registry=https://registry.npmjs.org
 
 # 复制源码并构建
 COPY . .
