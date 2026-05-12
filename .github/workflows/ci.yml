@@ -42,17 +42,10 @@ jobs:
           --health-retries=5
 
     steps:
-      - name: Disable git symlinks (path too long workaround)
+      - name: Disable git symlinks (path too long workaround on some filesystems)
         run: git config --global core.symlinks false
 
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            backend
-            frontend/src/utils/ws.js
-            frontend/package.json
-            frontend/package-lock.json
-          sparse-checkout-cone-mode: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
@@ -87,15 +80,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Disable git symlinks (path too long workaround)
+      - name: Disable git symlinks
         run: git config --global core.symlinks false
 
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            frontend
-            common
-          sparse-checkout-cone-mode: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
@@ -126,19 +114,10 @@ jobs:
     needs: [backend-test, frontend-build]
 
     steps:
-      - name: Disable git symlinks (path too long workaround)
+      - name: Disable git symlinks
         run: git config --global core.symlinks false
 
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            backend
-            frontend
-            common
-            docker
-            docker-compose.yml
-            docker-compose.prod.yml
-          sparse-checkout-cone-mode: false
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -187,16 +166,10 @@ jobs:
           --health-retries=5
 
     steps:
-      - name: Disable git symlinks (path too long workaround)
+      - name: Disable git symlinks
         run: git config --global core.symlinks false
 
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            backend
-            frontend
-            common
-          sparse-checkout-cone-mode: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
