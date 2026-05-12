@@ -245,6 +245,13 @@ jobs:
       - name: Run Playwright E2E
         run: |
           set -o pipefail
+          echo "=== Backend health ==="
+          curl -sf http://localhost:3000/api/health && echo "Backend OK" || echo "Backend FAIL"
+          echo "=== Frontend health ==="
+          curl -sf http://localhost:8080/ && echo "Frontend OK" || echo "Frontend FAIL"
+          echo "=== API proxy test ==="
+          curl -sf http://localhost:8080/api/health && echo "Proxy OK" || echo "Proxy FAIL"
+          echo "=== Running Playwright ==="
           PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright \
           npx playwright test --config=e2e/playwright.config.js --timeout=30000 2>&1 | tee playwright-output.log
         working-directory: backend
