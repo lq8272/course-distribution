@@ -31,22 +31,18 @@ function request(path, options = {}) {
     const bypassPath = path.includes('?')
       ? `${path}&__test_bypass=1`
       : `${path}?__test_bypass=1`;
-    // 注意：path 若以 /api 或 / 开头则 URL(base, path) 会忽略 base，须手动拼接
-    // 已有 origin（完整 URL）则直接使用
     const baseUrl = new URL(API_BASE);
-    const basePath = baseUrl.pathname; // e.g. '/api'
+    const basePath = baseUrl.pathname; // e.g. '/api/v1'
     let fullPath;
     if (bypassPath.startsWith('http://') || bypassPath.startsWith('https://')) {
-      // 已是完整 URL，直接添加 bypass param（已在上方添加）
       fullPath = bypassPath;
-    } else if (bypassPath.startsWith('/api')) {
-      // Jest 传入 /api/...，直接使用
-      fullPath = bypassPath;
+    } else if (bypassPath.startsWith('/api/')) {
+      // 绝对路径如 /api/... → 替换 /api/ 为 basePath
+      // 使 /api/course/list → /api/v1/course/list
+      fullPath = basePath + bypassPath.slice(4); // basePath + '/course/list'
     } else if (bypassPath.startsWith('/')) {
-      // E2E 传入 /auth/...，拼接 basePath
       fullPath = `${basePath}${bypassPath}`;
     } else {
-      // 相对路径
       fullPath = `${basePath}/${bypassPath}`;
     }
     const url = new URL(fullPath, `${baseUrl.origin}`);
