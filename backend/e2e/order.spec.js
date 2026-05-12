@@ -30,7 +30,7 @@ test.describe('订单与佣金模块', () => {
   });
 
   test('订单列表页可正常打开', async ({ page }) => {
-    await page.goto('/#/pages/order/list');
+    await page.goto('http://localhost:8080/#/pages/order/list');
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     // 验证页面存在（订单卡片或空状态）
     const hasOrderCard = await page.locator('.order-card').count() > 0;
@@ -39,7 +39,7 @@ test.describe('订单与佣金模块', () => {
   });
 
   test('我的钱包页可正常打开，显示余额信息', async ({ page }) => {
-    await page.goto('/#/pages/user/wallet');
+    await page.goto('http://localhost:8080/#/pages/user/wallet');
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     // 验证余额卡片（balance-card__amount 真实存在于源码）
     const hasBalance = await page.locator('.balance-card__amount').isVisible().catch(() => false);

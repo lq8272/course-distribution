@@ -30,7 +30,7 @@ test.describe('课程模块', () => {
   });
 
   test('首页展示 Banner 和分类标签', async ({ page }) => {
-    await page.goto('/#/pages/index/index');
+    await page.goto('http://localhost:8080/#/pages/index/index');
     // 等待页面加载
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     // 验证关键元素
@@ -43,7 +43,7 @@ test.describe('课程模块', () => {
   });
 
   test('首页课程列表加载成功，显示课程卡片', async ({ page }) => {
-    await page.goto('/#/pages/index/index');
+    await page.goto('http://localhost:8080/#/pages/index/index');
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     // 课程卡片可能为空列表，只需页面不崩溃即可
     const cards = page.locator('.course-card');
@@ -53,7 +53,7 @@ test.describe('课程模块', () => {
   });
 
   test('点击课程卡片 → 进入详情页', async ({ page }) => {
-    await page.goto('/#/pages/index/index');
+    await page.goto('http://localhost:8080/#/pages/index/index');
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     const firstCard = page.locator('.course-card').first();
     const cardExists = await firstCard.count() > 0;
@@ -76,7 +76,7 @@ test.describe('课程模块', () => {
       // 无课程数据时跳过
       test.skip();
     }
-    await page.goto(`/#/pages/course/detail?id=${courseId}`);
+    await page.goto('http://localhost:8080/#/pages/course/detail?id=' + courseId);
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     // 验证购买按钮
     const buyBtn = page.locator('text=立即购买');

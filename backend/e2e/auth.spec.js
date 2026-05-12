@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('登录模块', () => {
   test('登录页能正常加载，显示微信登录按钮和品牌区', async ({ page }) => {
-    await page.goto('/#/pages/login/index');
+    await page.goto('http://localhost:8080/#/pages/login/index');
     await page.waitForTimeout(2000);
 
     // 验证品牌区
@@ -20,7 +20,7 @@ test.describe('登录模块', () => {
   });
 
   test('管理员登录入口可点击', async ({ page }) => {
-    await page.goto('/#/pages/login/index');
+    await page.goto('http://localhost:8080/#/pages/login/index');
     await page.waitForTimeout(2000);
 
     // 点击管理员入口
@@ -33,7 +33,7 @@ test.describe('登录模块', () => {
   });
 
   test('协议复选框可切换状态', async ({ page }) => {
-    await page.goto('/#/pages/login/index');
+    await page.goto('http://localhost:8080/#/pages/login/index');
     await page.waitForTimeout(2000);
 
     const checkbox = page.locator('.agreement__checkbox');
