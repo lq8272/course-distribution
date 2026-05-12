@@ -5,7 +5,7 @@
  */
 import { test } from '@playwright/test';
 
-const API = 'http://localhost:3000/api';
+const API = 'http://localhost:3000/api/v1';
 
 /**
  * 登录并返回 { token, refreshToken }

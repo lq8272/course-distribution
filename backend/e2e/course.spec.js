@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3000/api';
+const API = 'http://localhost:3000/api/v1';
 
 /**
  * 在 Node.js 端登录并获取 token
@@ -60,7 +60,7 @@ test.describe('课程模块', () => {
     // 直接通过 API 获取课程 ID，再导航到详情页
     const res = await fetch(`${API}/course/list?__test_bypass=1`);
     const json = await res.json();
-    const courseId = json?.data?.list?.[0]?.id;
+    const courseId = json?.data?.rows?.[0]?.id;
     await page.goto(`/#/pages/course/detail?id=${courseId}`);
     await page.waitForTimeout(4000);
     // 购买按钮始终可见（未购买时显示"立即购买 ¥XX"）

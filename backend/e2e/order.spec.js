@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3000/api';
+const API = 'http://localhost:3000/api/v1';
 
 /**
  * 在 Node.js 端登录并获取 token
