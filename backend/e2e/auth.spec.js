@@ -1,55 +1,53 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, logout } from './helpers.js';
 
 test.describe('登录模块', () => {
-  test('测试面板打开且显示测试用户列表', async ({ page }) => {
+  test('登录页能正常加载，显示微信登录按钮和品牌区', async ({ page }) => {
     await page.goto('/#/pages/login/index');
     await page.waitForTimeout(2000);
 
-    // uni-button.test-btn 覆盖了内部的 <span>，用 force 绕过
-    await page.locator('.test-btn').click({ force: true });
-    await page.waitForTimeout(500);
+    // 验证品牌区
+    await expect(page.locator('.brand__name')).toBeVisible();
+    await expect(page.locator('.brand__tagline')).toBeVisible();
 
-    await expect(page.locator('.test-panel')).toBeVisible();
-    const userItems = page.locator('.test-user-item');
-    await expect(userItems).toHaveCount(3);
+    // 验证微信登录按钮
+    await expect(page.locator('.btn-wechat')).toBeVisible();
+
+    // 验证管理员入口
+    await expect(page.locator('.admin-entry')).toBeVisible();
+
+    // 验证协议区域
+    await expect(page.locator('.agreement')).toBeVisible();
   });
 
-  test('自定义 code 输入框可正常输入', async ({ page }) => {
+  test('管理员登录入口可点击', async ({ page }) => {
     await page.goto('/#/pages/login/index');
     await page.waitForTimeout(2000);
 
-    await page.locator('.test-btn').click({ force: true });
-    await page.waitForTimeout(500);
+    // 点击管理员入口
+    await page.locator('.admin-entry').click();
+    await page.waitForTimeout(1500);
 
-    const input = page.locator('.test-custom-input input');
-    await input.fill('test_user_999');
-    await expect(input).toHaveValue('test_user_999');
-  });
-
-  test('登录成功 → 跳转到首页（体验代理）', async ({ page }) => {
-    await page.goto('/#/pages/login/index');
-    await page.waitForTimeout(2000);
-
-    await page.locator('.test-btn').click({ force: true });
-    await page.waitForTimeout(500);
-    await page.locator('.test-login-btn').click({ force: true });
-    await page.waitForTimeout(3000);
-
+    // 应跳转到管理员登录页
     const url = page.url();
-    // 实际跳转到 /#/（根路径），部分代理用户可能需要申请页
-    expect(url).toMatch(/#\/?$/);
+    expect(url).toMatch(/admin/);
   });
 
-  test('游客先看看 → 跳转首页但未登录状态', async ({ page }) => {
+  test('协议复选框可切换状态', async ({ page }) => {
     await page.goto('/#/pages/login/index');
     await page.waitForTimeout(2000);
 
-    await page.click('text=先看看再说');
-    await page.waitForTimeout(2000);
+    const checkbox = page.locator('.agreement__checkbox');
+    await expect(checkbox).toBeVisible();
 
-    // 验证在首页
-    const url = page.url();
-    expect(url).toMatch(/#\/?$/);
+    // 默认未选中
+    const initialChecked = await checkbox.evaluate(el => el.classList.contains('is-checked'));
+    expect(initialChecked).toBe(false);
+
+    // 点击选中
+    await checkbox.click();
+    await page.waitForTimeout(300);
+
+    const afterClickChecked = await checkbox.evaluate(el => el.classList.contains('is-checked'));
+    expect(afterClickChecked).toBe(true);
   });
 });
