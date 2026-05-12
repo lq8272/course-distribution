@@ -6,16 +6,29 @@
 
 # Test info
 
-- Name: e2e/auth.spec.js >> 登录模块 >> 登录成功 → 跳转到首页（体验代理）
-- Location: e2e/auth.spec.js:30:7
+- Name: auth.spec.js >> 登录模块 >> 游客先看看 → 跳转首页但未登录状态
+- Location: e2e/auth.spec.js:44:7
 
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/login/index", waiting until "load"
+Test timeout of 15000ms exceeded.
+```
 
+```
+Error: page.click: Test timeout of 15000ms exceeded.
+Call log:
+  - waiting for locator('text=先看看再说')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -51,8 +64,7 @@ Call log:
   28 |   });
   29 | 
   30 |   test('登录成功 → 跳转到首页（体验代理）', async ({ page }) => {
-> 31 |     await page.goto('/#/pages/login/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  31 |     await page.goto('/#/pages/login/index');
   32 |     await page.waitForTimeout(2000);
   33 | 
   34 |     await page.locator('.test-btn').click({ force: true });
@@ -69,7 +81,8 @@ Call log:
   45 |     await page.goto('/#/pages/login/index');
   46 |     await page.waitForTimeout(2000);
   47 | 
-  48 |     await page.click('text=先看看再说');
+> 48 |     await page.click('text=先看看再说');
+     |                ^ Error: page.click: Test timeout of 15000ms exceeded.
   49 |     await page.waitForTimeout(2000);
   50 | 
   51 |     // 验证在首页

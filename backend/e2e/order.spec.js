@@ -31,19 +31,18 @@ test.describe('订单与佣金模块', () => {
 
   test('订单列表页可正常打开', async ({ page }) => {
     await page.goto('/#/pages/order/list');
-    await page.waitForTimeout(3000);
-    const hasContent =
-      (await page.locator('.order-card').count()) > 0 ||
-      (await page.locator('.empty-state').isVisible());
-    expect(hasContent).toBeTruthy();
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    // 验证页面存在（订单卡片或空状态）
+    const hasOrderCard = await page.locator('.order-card').count() > 0;
+    const hasEmptyState = await page.locator('.empty-state').isVisible().catch(() => false);
+    expect(hasOrderCard || hasEmptyState).toBeTruthy();
   });
 
-  test('我的钱包页可正常打开，显示佣金信息', async ({ page }) => {
+  test('我的钱包页可正常打开，显示余额信息', async ({ page }) => {
     await page.goto('/#/pages/user/wallet');
-    await page.waitForTimeout(3000);
-    const hasWallet =
-      (await page.locator('.balance-card__amount').isVisible()) ||
-      (await page.locator('.commission-info').isVisible());
-    expect(hasWallet).toBeTruthy();
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    // 验证余额卡片（balance-card__amount 真实存在于源码）
+    const hasBalance = await page.locator('.balance-card__amount').isVisible().catch(() => false);
+    expect(hasBalance).toBeTruthy();
   });
 });

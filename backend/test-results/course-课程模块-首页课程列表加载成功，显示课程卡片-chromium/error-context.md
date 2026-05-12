@@ -6,16 +6,32 @@
 
 # Test info
 
-- Name: e2e/course.spec.js >> 课程模块 >> 点击课程卡片 → 进入详情页
-- Location: e2e/course.spec.js:48:7
+- Name: course.spec.js >> 课程模块 >> 首页课程列表加载成功，显示课程卡片
+- Location: e2e/course.spec.js:39:7
 
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/index/index", waiting until "load"
+Error: expect(locator).toBeVisible() failed
 
+Locator: locator('.course-card').first()
+Expected: visible
+Timeout: 8000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 8000ms
+  - waiting for locator('.course-card').first()
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -23,7 +39,7 @@ Call log:
 ```ts
   1  | import { test, expect } from '@playwright/test';
   2  | 
-  3  | const API = 'http://localhost:3000/api';
+  3  | const API = 'http://localhost:3000/api/v1';
   4  | 
   5  | /**
   6  |  * 在 Node.js 端登录并获取 token
@@ -63,14 +79,14 @@ Call log:
   40 |     await page.goto('/#/pages/index/index');
   41 |     await page.waitForTimeout(3000);
   42 |     const cards = page.locator('.course-card');
-  43 |     await expect(cards.first()).toBeVisible({ timeout: 8000 });
+> 43 |     await expect(cards.first()).toBeVisible({ timeout: 8000 });
+     |                                 ^ Error: expect(locator).toBeVisible() failed
   44 |     const count = await cards.count();
   45 |     expect(count).toBeGreaterThan(0);
   46 |   });
   47 | 
   48 |   test('点击课程卡片 → 进入详情页', async ({ page }) => {
-> 49 |     await page.goto('/#/pages/index/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  49 |     await page.goto('/#/pages/index/index');
   50 |     await page.waitForTimeout(3000);
   51 |     const firstCard = page.locator('.course-card').first();
   52 |     await firstCard.click({ force: true });
@@ -84,7 +100,7 @@ Call log:
   60 |     // 直接通过 API 获取课程 ID，再导航到详情页
   61 |     const res = await fetch(`${API}/course/list?__test_bypass=1`);
   62 |     const json = await res.json();
-  63 |     const courseId = json?.data?.list?.[0]?.id;
+  63 |     const courseId = json?.data?.rows?.[0]?.id;
   64 |     await page.goto(`/#/pages/course/detail?id=${courseId}`);
   65 |     await page.waitForTimeout(4000);
   66 |     // 购买按钮始终可见（未购买时显示"立即购买 ¥XX"）

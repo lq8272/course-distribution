@@ -230,19 +230,14 @@ jobs:
 
       - name: Build frontend for E2E
         run: |
+          cp frontend/.env.e2e frontend/.env
           npm ci --registry=https://registry.npmjs.org --legacy-peer-deps
           npm run build:h5
         working-directory: frontend
 
       - name: Serve frontend with nginx
         run: |
-          cat > /tmp/Dockerfile.frontend << 'EOF'
-          FROM nginx:alpine
-          COPY . /usr/share/nginx/html
-          EXPOSE 80
-          CMD ["nginx", "-g", "daemon off;"]
-          EOF
-          docker build -t course-frontend:e2e -f /tmp/Dockerfile.frontend ./frontend/dist/build/h5
+          docker build -f Dockerfile.e2e.frontend -t course-frontend:e2e ./frontend/dist/build/h5
           docker run -d --name course-frontend -p 8080:80 course-frontend:e2e
           sleep 5
           for i in {1..10}; do curl -sf http://localhost:8080/ && echo "Frontend OK" && break || sleep 2; done

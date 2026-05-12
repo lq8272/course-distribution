@@ -6,16 +6,29 @@
 
 # Test info
 
-- Name: e2e/auth.spec.js >> 登录模块 >> 测试面板打开且显示测试用户列表
-- Location: e2e/auth.spec.js:5:7
+- Name: auth.spec.js >> 登录模块 >> 登录成功 → 跳转到首页（体验代理）
+- Location: e2e/auth.spec.js:30:7
 
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/login/index", waiting until "load"
+Test timeout of 15000ms exceeded.
+```
 
+```
+Error: locator.click: Test timeout of 15000ms exceeded.
+Call log:
+  - waiting for locator('.test-btn')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -26,8 +39,7 @@ Call log:
   3  | 
   4  | test.describe('登录模块', () => {
   5  |   test('测试面板打开且显示测试用户列表', async ({ page }) => {
-> 6  |     await page.goto('/#/pages/login/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  6  |     await page.goto('/#/pages/login/index');
   7  |     await page.waitForTimeout(2000);
   8  | 
   9  |     // uni-button.test-btn 覆盖了内部的 <span>，用 force 绕过
@@ -55,7 +67,8 @@ Call log:
   31 |     await page.goto('/#/pages/login/index');
   32 |     await page.waitForTimeout(2000);
   33 | 
-  34 |     await page.locator('.test-btn').click({ force: true });
+> 34 |     await page.locator('.test-btn').click({ force: true });
+     |                                     ^ Error: locator.click: Test timeout of 15000ms exceeded.
   35 |     await page.waitForTimeout(500);
   36 |     await page.locator('.test-login-btn').click({ force: true });
   37 |     await page.waitForTimeout(3000);

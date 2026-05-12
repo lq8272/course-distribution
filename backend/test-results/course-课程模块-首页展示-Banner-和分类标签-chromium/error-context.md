@@ -6,16 +6,32 @@
 
 # Test info
 
-- Name: e2e/course.spec.js >> 课程模块 >> 首页展示 Banner 和分类标签
+- Name: course.spec.js >> 课程模块 >> 首页展示 Banner 和分类标签
 - Location: e2e/course.spec.js:32:7
 
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/index/index", waiting until "load"
+Error: expect(locator).toBeVisible() failed
 
+Locator: locator('.banner-swiper')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('.banner-swiper')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -23,7 +39,7 @@ Call log:
 ```ts
   1  | import { test, expect } from '@playwright/test';
   2  | 
-  3  | const API = 'http://localhost:3000/api';
+  3  | const API = 'http://localhost:3000/api/v1';
   4  | 
   5  | /**
   6  |  * 在 Node.js 端登录并获取 token
@@ -53,10 +69,10 @@ Call log:
   30 |   });
   31 | 
   32 |   test('首页展示 Banner 和分类标签', async ({ page }) => {
-> 33 |     await page.goto('/#/pages/index/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  33 |     await page.goto('/#/pages/index/index');
   34 |     await page.waitForTimeout(3000);
-  35 |     await expect(page.locator('.banner-swiper')).toBeVisible();
+> 35 |     await expect(page.locator('.banner-swiper')).toBeVisible();
+     |                                                  ^ Error: expect(locator).toBeVisible() failed
   36 |     await expect(page.locator('.categories')).toBeVisible();
   37 |   });
   38 | 
@@ -84,7 +100,7 @@ Call log:
   60 |     // 直接通过 API 获取课程 ID，再导航到详情页
   61 |     const res = await fetch(`${API}/course/list?__test_bypass=1`);
   62 |     const json = await res.json();
-  63 |     const courseId = json?.data?.list?.[0]?.id;
+  63 |     const courseId = json?.data?.rows?.[0]?.id;
   64 |     await page.goto(`/#/pages/course/detail?id=${courseId}`);
   65 |     await page.waitForTimeout(4000);
   66 |     // 购买按钮始终可见（未购买时显示"立即购买 ¥XX"）
