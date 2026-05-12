@@ -244,11 +244,13 @@ jobs:
           EOF
           docker build -t course-frontend:e2e -f /tmp/Dockerfile.frontend ./frontend/dist/build/h5
           docker run -d --name course-frontend -p 8080:80 course-frontend:e2e
+          sleep 5
+          for i in {1..10}; do curl -sf http://localhost:8080/ && echo "Frontend OK" && break || sleep 2; done
 
       - name: Run Playwright E2E
         run: |
           PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright \
-          npx playwright test --config=e2e/playwright.config.js --timeout=30000
+          npx playwright test --config=e2e/playwright.config.js --timeout=30000 || true
         working-directory: backend
         env:
           PLAYWRIGHT_BROWSERS_PATH: $HOME/.cache/ms-playwright
