@@ -12,10 +12,26 @@
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/login/index", waiting until "load"
+Error: expect(locator).toBeVisible() failed
 
+Locator: locator('.brand__name')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('.brand__name')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -25,12 +41,12 @@ Call log:
   2  | 
   3  | test.describe('登录模块', () => {
   4  |   test('登录页能正常加载，显示微信登录按钮和品牌区', async ({ page }) => {
-> 5  |     await page.goto('/#/pages/login/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  5  |     await page.goto('http://localhost:8080/#/pages/login/index');
   6  |     await page.waitForTimeout(2000);
   7  | 
   8  |     // 验证品牌区
-  9  |     await expect(page.locator('.brand__name')).toBeVisible();
+> 9  |     await expect(page.locator('.brand__name')).toBeVisible();
+     |                                                ^ Error: expect(locator).toBeVisible() failed
   10 |     await expect(page.locator('.brand__tagline')).toBeVisible();
   11 | 
   12 |     // 验证微信登录按钮
@@ -44,7 +60,7 @@ Call log:
   20 |   });
   21 | 
   22 |   test('管理员登录入口可点击', async ({ page }) => {
-  23 |     await page.goto('/#/pages/login/index');
+  23 |     await page.goto('http://localhost:8080/#/pages/login/index');
   24 |     await page.waitForTimeout(2000);
   25 | 
   26 |     // 点击管理员入口
@@ -57,7 +73,7 @@ Call log:
   33 |   });
   34 | 
   35 |   test('协议复选框可切换状态', async ({ page }) => {
-  36 |     await page.goto('/#/pages/login/index');
+  36 |     await page.goto('http://localhost:8080/#/pages/login/index');
   37 |     await page.waitForTimeout(2000);
   38 | 
   39 |     const checkbox = page.locator('.agreement__checkbox');

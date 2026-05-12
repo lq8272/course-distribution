@@ -12,10 +12,23 @@
 # Error details
 
 ```
-Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
-Call log:
-  - navigating to "/#/pages/login/index", waiting until "load"
+Test timeout of 10000ms exceeded.
+```
 
+```
+Error: locator.click: Test timeout of 10000ms exceeded.
+Call log:
+  - waiting for locator('.admin-entry')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - heading "403 Forbidden" [level=1] [ref=e3]
+  - separator [ref=e4]
+  - generic [ref=e5]: nginx/1.29.8
 ```
 
 # Test source
@@ -25,7 +38,7 @@ Call log:
   2  | 
   3  | test.describe('登录模块', () => {
   4  |   test('登录页能正常加载，显示微信登录按钮和品牌区', async ({ page }) => {
-  5  |     await page.goto('/#/pages/login/index');
+  5  |     await page.goto('http://localhost:8080/#/pages/login/index');
   6  |     await page.waitForTimeout(2000);
   7  | 
   8  |     // 验证品牌区
@@ -43,12 +56,12 @@ Call log:
   20 |   });
   21 | 
   22 |   test('管理员登录入口可点击', async ({ page }) => {
-> 23 |     await page.goto('/#/pages/login/index');
-     |                ^ Error: page.goto: Protocol error (Page.navigate): Cannot navigate to invalid URL
+  23 |     await page.goto('http://localhost:8080/#/pages/login/index');
   24 |     await page.waitForTimeout(2000);
   25 | 
   26 |     // 点击管理员入口
-  27 |     await page.locator('.admin-entry').click();
+> 27 |     await page.locator('.admin-entry').click();
+     |                                        ^ Error: locator.click: Test timeout of 10000ms exceeded.
   28 |     await page.waitForTimeout(1500);
   29 | 
   30 |     // 应跳转到管理员登录页
@@ -57,7 +70,7 @@ Call log:
   33 |   });
   34 | 
   35 |   test('协议复选框可切换状态', async ({ page }) => {
-  36 |     await page.goto('/#/pages/login/index');
+  36 |     await page.goto('http://localhost:8080/#/pages/login/index');
   37 |     await page.waitForTimeout(2000);
   38 | 
   39 |     const checkbox = page.locator('.agreement__checkbox');
