@@ -58,13 +58,40 @@ jobs:
         run: npm ci --legacy-peer-deps
         working-directory: backend
 
+      - name: Initialize database schema
+        run: npm run init-db
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DB_HOST: mysql
+          DB_PASSWORD: rootpassword
+          REDIS_HOST: redis
+
+      - name: Start backend server for tests
+        run: |
+          npm run dev &
+          echo "Waiting for backend to be ready..."
+          for i in {1..30}; do
+            curl -s http://localhost:3000/api/health && echo "" && echo "Backend ready" && break
+            echo "Backend not ready, waiting... ($i/30)"
+            sleep 2
+          done
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DB_HOST: mysql
+          DB_PASSWORD: rootpassword
+          REDIS_HOST: redis
+
       - name: Run Jest tests
         run: npm test -- --no-cache --forceExit
         working-directory: backend
         env:
           NODE_ENV: test
           TEST_API: http://localhost:3000/api
-          WAIT_HOSTS: mysql:3306 redis:6379
+          DB_HOST: mysql
+          DB_PASSWORD: rootpassword
+          REDIS_HOST: redis
 
       - name: Upload Jest report
         if: always()
