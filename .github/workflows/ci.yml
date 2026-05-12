@@ -70,11 +70,11 @@ jobs:
 
       - name: Start backend server for tests
         run: |
-          npm run dev &
+          node src/index.js &
           echo "Waiting for backend to be ready..."
-          for i in {1..30}; do
-            curl -s http://localhost:3000/api/health && echo "" && echo "Backend ready" && break
-            echo "Backend not ready, waiting... ($i/30)"
+          for i in {1..15}; do
+            curl -sf http://localhost:3000/api/health && echo "" && echo "Backend ready" && break
+            echo "Backend not ready, waiting... ($i/15)"
             sleep 2
           done
         working-directory: backend
