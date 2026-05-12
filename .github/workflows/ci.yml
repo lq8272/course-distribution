@@ -133,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: frontend/dist/build/mp-weixin
+          path: frontend/dist/build/h5
           retention-days: 7
 
   # ---------- Docker 构建验证 ----------
