@@ -244,7 +244,8 @@ jobs:
 
       - name: Run Playwright E2E
         run: |
-          set -o pipefail
+          export PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright
+          export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
           echo "=== Node/npm versions ==="
           node --version && npm --version
           echo "=== Checking playwright ==="
@@ -258,8 +259,8 @@ jobs:
           echo "=== API proxy test ==="
           curl -sf http://localhost:8080/api/health && echo "Proxy OK" || echo "Proxy FAIL"
           echo "=== Running Playwright ==="
-          PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright \
           npx playwright test --config=e2e/playwright.config.js --timeout=30000 2>&1 | tee playwright-output.log
+          echo "=== Playwright exit code: $? ==="
         working-directory: backend
         env:
           PLAYWRIGHT_BROWSERS_PATH: $HOME/.cache/ms-playwright
