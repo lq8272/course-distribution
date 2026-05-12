@@ -1,6 +1,6 @@
 // 用户状态管理 - Pinia 版本
 import { defineStore } from 'pinia';
-import { computed, ref } from 'pinia';
+import { computed, ref } from 'vue';
 
 export const useUserStore = defineStore('user', () => {
   // 状态
