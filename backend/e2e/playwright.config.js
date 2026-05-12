@@ -12,9 +12,15 @@ module.exports = defineConfig({
     viewport: { width: 375, height: 812 },
     ignoreHTTPSErrors: true,
     launchOptions: {
-      args: ['--no-sandbox'],
+      args: ['--no-sandbox', '--disable-dev-shm-usage'],
     },
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium' },
+    },
+  ],
   webServer: null,
   reporter: [
     ['list'],
