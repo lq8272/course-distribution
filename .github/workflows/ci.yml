@@ -250,7 +250,7 @@ jobs:
       - name: Run Playwright E2E
         run: |
           PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright \
-          npx playwright test --config=e2e/playwright.config.js --timeout=30000 || true
+          npx playwright test --config=e2e/playwright.config.js --timeout=30000
         working-directory: backend
         env:
           PLAYWRIGHT_BROWSERS_PATH: $HOME/.cache/ms-playwright
