@@ -228,11 +228,11 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: backend
 
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: /tmp/frontend-dist
+      - name: Build frontend for E2E
+        run: |
+          npm ci --registry=https://registry.npmjs.org --legacy-peer-deps
+          npm run build:h5
+        working-directory: frontend
 
       - name: Serve frontend with nginx
         run: |
@@ -242,7 +242,7 @@ jobs:
           EXPOSE 80
           CMD ["nginx", "-g", "daemon off;"]
           EOF
-          docker build -t course-frontend:e2e -f /tmp/Dockerfile.frontend /tmp/frontend-dist
+          docker build -t course-frontend:e2e -f /tmp/Dockerfile.frontend ./frontend/dist/build/h5
           docker run -d --name course-frontend -p 8080:80 course-frontend:e2e
 
       - name: Run Playwright E2E
