@@ -63,7 +63,7 @@ jobs:
         working-directory: backend
         env:
           NODE_ENV: test
-          DB_HOST: mysql
+          DB_HOST: 127.0.0.1
           DB_USER: root
           DB_PASSWORD: rootpassword
           REDIS_HOST: redis
@@ -80,7 +80,7 @@ jobs:
         working-directory: backend
         env:
           NODE_ENV: test
-          DB_HOST: mysql
+          DB_HOST: 127.0.0.1
           DB_USER: root
           DB_PASSWORD: rootpassword
           REDIS_HOST: redis
@@ -91,7 +91,7 @@ jobs:
         env:
           NODE_ENV: test
           TEST_API: http://localhost:3000/api
-          DB_HOST: mysql
+          DB_HOST: 127.0.0.1
           DB_PASSWORD: rootpassword
           REDIS_HOST: redis
 
