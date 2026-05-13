@@ -54,11 +54,6 @@ router.post('/withdraw', auth, async (req, res) => {
     const { amount } = req.body;
     if (!amount || amount <= 0) return fail(res, 400, 40000, '请输入有效金额');
 
-    // 查询最低提现额度（db.query 返回 [row]，不是 [[row]]）
-    const cfg = await db.query("SELECT value FROM configs WHERE `key` = 'min_withdraw_amount' LIMIT 1");
-    const minAmount = cfg.length ? parseFloat(cfg[0].value) : 100;
-    if (amount < minAmount) return fail(res, 400, 40000, `最低提现${minAmount}元`);
-
     // 事务内：锁定可用佣金 → 校验余额 → 扣除 → 写入提现记录
     const conn = await db.getConnection();
     await conn.beginTransaction();
