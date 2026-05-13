@@ -126,11 +126,12 @@ router.post('/notify', async (req, res) => {
     const { pipeline, events, items } = req.body;
 
     // 验证是否是转码完成事件（兼容中英文事件名）
-    // 七牛云事件名：s灌云转码完成 / s灌云TranscodeFinished
+    // 七牛云事件名：TranscodeFinished / fop_done / workflow_finished
     const isTranscoded = events && (
-      events.includes('s灌云转码完成') ||
       events.includes('TranscodeFinished') ||
-      events.includes('s灌云')
+      events.includes('fop_done') ||
+      events.includes('workflow_finished') ||
+      events.includes('转码完成')
     );
     if (!isTranscoded) {
       // 可能是其他事件，直接返回成功

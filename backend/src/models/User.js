@@ -73,7 +73,7 @@ const User = {
     if (!username || !password) return null;
     // 必须是 is_admin=1 才算管理员
     const rows = await db.query(
-      `SELECT * FROM users WHERE is_admin = 1 AND (phone = ? OR id = ? OR openid = ? OR nickname = ?) AND admin_password IS NOT NULL LIMIT 1`,
+      `SELECT * FROM users WHERE is_admin = 1 AND (phone = ? OR id = ? OR openid = ? OR nickname = ?) AND admin_password IS NOT NULL AND admin_password != '' LIMIT 1`,
       [username, Number.isInteger(Number(username)) ? Number(username) : -1, username, username]
     );
     if (!rows.length) return null;
@@ -149,10 +149,22 @@ const User = {
   },
 };
 
+// 模块级缓存：避免 findRootIdRecursive 每层递归重复查询 platform_root_user_id
+let _platformRootIdCache = null;
+
+function getPlatformRootId() {
+  if (_platformRootIdCache !== null) return _platformRootIdCache;
+  // 同步读取（仅在首次调用时执行一次），后续使用缓存值
+  return null; // 异步填充，见 findRootIdRecursive
+}
+
 // 递归向上查找第一个有效分销商作为 root_id
 async function findRootIdRecursive(userId) {
-  const cfg = await db.query("SELECT value FROM configs WHERE `key` = 'platform_root_user_id' LIMIT 1");
-  const platformRootId = cfg.length > 0 ? parseInt(cfg[0].value) : 1;
+  if (_platformRootIdCache === null) {
+    const cfg = await db.query("SELECT value FROM configs WHERE `key` = 'platform_root_user_id' LIMIT 1");
+    _platformRootIdCache = cfg.length > 0 ? parseInt(cfg[0].value) : 1;
+  }
+  const platformRootId = _platformRootIdCache;
 
   let currentId = userId;
   const visited = new Set();

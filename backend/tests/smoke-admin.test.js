@@ -130,6 +130,42 @@ async function run() {
     console.log(`    total=${r.body.data.total}`);
   }
 
+  // Step 14: 客服会话列表（GET /admin/service/conversations）
+  console.log('\n[14] 客服会话列表');
+  r = await apiRequest('GET', '/api/admin/service/conversations?page=1&page_size=5', null, adminToken);
+  if (await resp('GET /admin/service/conversations', r)) {
+    console.log(`    total=${r.body.data.total}, rows=${r.body.data.rows?.length}`);
+  }
+
+  // Step 15: 客服会话详情（GET /admin/service/conversations/:id）
+  console.log('\n[15] 客服会话详情');
+  const convId = 1;
+  r = await apiRequest('GET', `/api/admin/service/conversations/${convId}`, null, adminToken);
+  await resp('GET /admin/service/conversations/:id', r);
+
+  // Step 16: 客服消息列表（GET /admin/service/messages/:conversationId）
+  console.log('\n[16] 客服消息列表');
+  r = await apiRequest('GET', `/api/admin/service/messages/${convId}`, null, adminToken);
+  await resp('GET /admin/service/messages/:conversationId', r);
+
+  // Step 17: 发送客服消息（POST /admin/service/messages/:conversationId）
+  console.log('\n[17] 发送客服消息');
+  r = await apiRequest('POST', `/api/admin/service/messages/${convId}`, { content: '冒烟测试回复' }, adminToken);
+  await resp('POST /admin/service/messages/:conversationId', r);
+
+  // Step 18: 更新会话状态（PUT /admin/service/conversations/:id/status）
+  console.log('\n[18] 更新会话状态');
+  r = await apiRequest('PUT', `/api/admin/service/conversations/${convId}/status`, { status: 1 }, adminToken);
+  await resp('PUT /admin/service/conversations/:id/status', r);
+
+  // Step 19: 客服统计（GET /admin/service/stats）
+  console.log('\n[19] 客服统计');
+  r = await apiRequest('GET', '/api/admin/service/stats', null, adminToken);
+  if (await resp('GET /admin/service/stats', r)) {
+    const s = r.body.data;
+    console.log(`    total=${s.total} pending=${s.pending} replied=${s.replied}`);
+  }
+
   // 无权限验证：普通用户访问管理员接口
   console.log('\n--- 无权限验证（普通用户调用 admin 接口应返回 403）---');
   const userRes = await loginWithRetry('test_user_001', '冒烟普通用户');

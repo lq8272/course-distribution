@@ -275,24 +275,7 @@ router.post('/withdraw/:id/reject', auth, adminAuth, async (req, res) => {
       // 拒绝时：资金释放 — 恢复佣金记录状态 2→1（已提现→已入账）
       const [withdrawRecord] = rows;
       const refundAmount = parseFloat(withdrawRecord.amount);
-      // 按佣金记录 ID 倒序返还——先扣除（后产生）的记录先返还，避免返还已花销的旧记录
-      const [commissions] = await conn.query(
-        `SELECT id, amount FROM commissions WHERE user_id = ? AND status = 2 ORDER BY id DESC FOR UPDATE`,
-        [withdrawRecord.user_id]
-      );
-      let remaining = refundAmount;
-      for (const c of commissions) {
-        if (remaining <= 0) break;
-        const cAmt = parseFloat(c.amount);
-        if (cAmt <= remaining) {
-          await conn.execute('UPDATE commissions SET status = 1 WHERE id = ?', [c.id]);
-          remaining = Math.round((remaining - cAmt) * 100) / 100;
-        } else {
-          const newAmt = Math.round((cAmt - remaining) * 100) / 100;
-          await conn.execute('UPDATE commissions SET amount = ? WHERE id = ?', [newAmt, c.id]);
-          remaining = 0;
-        }
-      }
+      await Commission.revertForWithdraw(conn, withdrawRecord.user_id, refundAmount);
       await conn.execute(
         'UPDATE withdraw_records SET status = 2, handle_by = ?, handle_time = NOW(), remark = ? WHERE id = ?',
         [req.user.id, remark || '', parseInt(req.params.id)]

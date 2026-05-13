@@ -1,5 +1,26 @@
 const db = require('../config/database');
 
+// 推荐奖励必填配置项（key → 说明）
+const REQUIRED_REFERRAL_KEYS = [
+  'referral_reward_dr_dr', 'referral_reward_dr_mxj', 'referral_reward_dr_cjhh',
+  'referral_reward_mxj_dr', 'referral_reward_mxj_mxj', 'referral_reward_mxj_cjhh',
+  'referral_reward_cjhh_dr', 'referral_reward_cjhh_mxj', 'referral_reward_cjhh_cjhh',
+];
+
+// 启动时校验推荐奖励配置：缺失或为零时打印警告（不阻断启动）
+db.query('SELECT `key`, value FROM configs WHERE `key` IN (?,?,?,?,?,?,?,?,?)', REQUIRED_REFERRAL_KEYS)
+  .then(rows => {
+    const present = new Set(rows.map(r => r.key));
+    REQUIRED_REFERRAL_KEYS.forEach(key => {
+      if (!present.has(key)) {
+        console.warn(`[Commission] 推荐奖励配置缺失: ${key}，将按 0 处理`);
+      }
+    });
+  })
+  .catch(() => {
+    // 数据库未就绪时跳过（启动阶段数据库可能未准备好）
+  });
+
 const Commission = {
   /**
    * 订单确认后自动结算佣金 — 差额模式
@@ -178,6 +199,34 @@ const Commission = {
       await conn.rollback();
       if (shouldRelease) conn.release();
       throw e;
+    }
+  },
+
+  /**
+   * 提现拒绝时回滚佣金记录（status 2→1）
+   * @param {object} conn - 数据库连接（必须在事务内）
+   * @param {number} userId - 用户ID
+   * @param {number} refundAmount - 需回滚的总金额
+   * @returns {Promise<void>}
+   */
+  async revertForWithdraw(conn, userId, refundAmount) {
+    // 按佣金记录 ID 倒序返还——先扣除（后产生）的记录先返还，避免返还已花销的旧记录
+    const [commissions] = await conn.query(
+      'SELECT id, amount FROM commissions WHERE user_id = ? AND status = 2 ORDER BY id DESC FOR UPDATE',
+      [userId]
+    );
+    let remaining = refundAmount;
+    for (const c of commissions) {
+      if (remaining <= 0) break;
+      const cAmt = parseFloat(c.amount);
+      if (cAmt <= remaining) {
+        await conn.execute('UPDATE commissions SET status = 1 WHERE id = ?', [c.id]);
+        remaining = Math.round((remaining - cAmt) * 100) / 100;
+      } else {
+        const newAmt = Math.round((cAmt - remaining) * 100) / 100;
+        await conn.execute('UPDATE commissions SET amount = ? WHERE id = ?', [newAmt, c.id]);
+        remaining = 0;
+      }
     }
   },
 

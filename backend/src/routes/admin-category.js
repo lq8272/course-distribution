@@ -55,7 +55,16 @@ router.put('/:id', auth, adminAuth, async (req, res) => {
 // DELETE /api/admin/category/:id
 router.delete('/:id', auth, adminAuth, async (req, res) => {
   try {
-    await db.execute('DELETE FROM course_categories WHERE id = ?', [parseInt(req.params.id)]);
+    const id = parseInt(req.params.id);
+    // 检查是否有子分类
+    const [children] = await db.query(
+      'SELECT id FROM course_categories WHERE parent_id = ? LIMIT 1',
+      [id]
+    );
+    if (children.length) {
+      return fail(res, 400, 40000, '该分类下存在子分类，请先删除子分类');
+    }
+    await db.execute('DELETE FROM course_categories WHERE id = ?', [id]);
     ok(res, null);
   } catch (err) {
     console.error(err);
