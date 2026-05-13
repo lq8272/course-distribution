@@ -245,6 +245,11 @@ const Agent = {
 
       // 2b. 推荐人数校验（从 agent_levels 表查目标等级的 upgrade_referral_min）
       const [levelCfg] = await conn.query('SELECT upgrade_referral_min FROM agent_levels WHERE level = ? LIMIT 1', [upgrade.to_level]);
+      if (!levelCfg?.length) {
+        await conn.rollback();
+        conn.release();
+        throw new Error(`等级配置不存在: ${upgrade.to_level}，无法审核升级`);
+      }
       const minReferrals = parseInt(levelCfg[0]?.upgrade_referral_min || 0);
       if (minReferrals > 0 && (agentRow.referral_count || 0) < minReferrals) {
         await conn.rollback();

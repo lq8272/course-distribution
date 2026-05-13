@@ -143,6 +143,11 @@ router.post('/notify', async (req, res) => {
       }
     }
 
+    // 解析七牛回调 body（可能为 object 或 string）
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const events = body.events;
+    const items = body.items;
+
     // 验证是否是转码完成事件（兼容中英文事件名）
     // 七牛云事件名：TranscodeFinished / fop_done / workflow_finished
     const isTranscoded = events && (

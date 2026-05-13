@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const adminAuth = require('../middleware/admin');
 const Course = require('../models/Course');
 const db = require('../config/database');
 const videoService = require('../services/video');
@@ -15,11 +16,8 @@ const videoService = require('../services/video');
 const ok = (res, data) => res.json({ code: 0, data, message: '成功' });
 const fail = (res, httpCode, appCode, msg) => res.status(httpCode).json({ code: appCode, message: msg });
 
-// 所有接口需管理员权限
-router.use(auth, (req, res, next) => {
-  if (!req.user.is_admin) return fail(res, 403, 40300, '需要管理员权限');
-  next();
-});
+// 所有接口需管理员权限（统一使用 adminAuth 中间件，从数据库重新验证 is_admin）
+router.use(auth, adminAuth);
 
 // GET /api/admin/course/list
 router.get('/list', async (req, res) => {

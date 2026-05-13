@@ -37,6 +37,7 @@ const Commission = {
    */
   async settleForOrder(orderId, existingConn = null) {
     const shouldRelease = existingConn === null;
+    const shouldCommit = existingConn === null; // 仅有外部传入连接时由调用方控制提交
     const conn = existingConn || await db.getConnection();
     if (!existingConn) await conn.beginTransaction();
     try {
@@ -157,11 +158,11 @@ const Commission = {
         [orderId]
       );
 
-      await conn.commit();
+      if (shouldCommit) await conn.commit();
       if (shouldRelease) conn.release();
       return settlements;
     } catch (e) {
-      await conn.rollback();
+      if (shouldCommit) await conn.rollback();
       if (shouldRelease) conn.release();
       throw e;
     }
@@ -174,6 +175,7 @@ const Commission = {
    */
   async revokeForOrder(orderId, existingConn = null) {
     const shouldRelease = existingConn === null;
+    const shouldCommit = existingConn === null;
     const conn = existingConn || await db.getConnection();
     if (!existingConn) await conn.beginTransaction();
     try {
@@ -193,10 +195,10 @@ const Commission = {
         'UPDATE orders SET commission_settled = 0 WHERE id = ?',
         [orderId]
       );
-      await conn.commit();
+      if (shouldCommit) await conn.commit();
       if (shouldRelease) conn.release();
     } catch (e) {
-      await conn.rollback();
+      if (shouldCommit) await conn.rollback();
       if (shouldRelease) conn.release();
       throw e;
     }

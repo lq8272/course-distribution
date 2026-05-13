@@ -2,7 +2,10 @@
 // 通过 VITE_API_BASE_URL 环境变量配置（.env.development / .env.production）
 // 开发环境：VITE_API_BASE_URL=http://127.0.0.1:3000/api/v1（微信开发者工具中 127.0.0.1 = Windows）
 // 生产环境：VITE_API_BASE_URL=https://yourdomain.com/api/v1
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+if (!BASE_URL) {
+  throw new Error('环境变量 VITE_API_BASE_URL 未配置，请检查 .env.production');
+}
 const REQUEST_TIMEOUT = 10000; // 10秒超时
 
 function request(url, options = {}) {

@@ -38,7 +38,8 @@ function rateLimit({ windowSec = 60, max = 60, keyPrefix = 'ratelimit' } = {}) {
       next();
     } catch (err) {
       console.error('[ratelimit] Redis 错误:', err.message);
-      next();
+      // Redis 故障时拒绝请求，而非静默放行，防止滥用
+      return res.status(503).json({ code: 50300, message: '服务暂时不可用，请稍后再试' });
     }
   };
 }
