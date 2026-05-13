@@ -230,6 +230,131 @@ const Commission = {
     }
   },
 
+  /**
+   * 批量结算多笔订单的佣金（用于 approve 时补偿历史订单）
+   * 相比循环调 settleForOrder，将每订单 ~10 次 DB 查询合并为常数次。
+   *
+   * @param {number[]} orderIds - 订单 ID 数组
+   * @param {object} conn - 数据库连接（必须在事务内）
+   * @returns {Promise<number>} 实际结算的订单数
+   */
+  async settleForOrdersBatch(orderIds, conn) {
+    if (!orderIds?.length) return 0;
+
+    // 1. 批量幂等检查 + 读取订单/课程信息（单次 JOIN）
+    const [orders] = await conn.query(
+      `SELECT o.id, o.user_id, o.course_id, o.direct_agent_id, o.status, o.commission_settled,
+              c.price
+       FROM orders o
+       JOIN courses c ON c.id = o.course_id
+       WHERE o.id IN (${orderIds.map(() => '?').join(',')})
+         AND o.status = 1 AND o.commission_settled = 0
+       FOR UPDATE`,
+      orderIds
+    );
+    if (!orders.length) return 0;
+
+    // 2. 批量读取 agent_levels（单次查询，全量缓存）
+    const [levelRows] = await conn.query(
+      "SELECT level, rebate_rate FROM agent_levels"
+    );
+    const levelRates = {};
+    levelRows.forEach(r => { levelRates[r.level] = parseFloat(r.rebate_rate) || 0; });
+
+    // 3. 收集所有需查询的分销商 user_id（来自 direct_agent_id）
+    const agentUserIds = [...new Set(orders.map(o => o.direct_agent_id).filter(Boolean))];
+    if (!agentUserIds.length) return 0;
+
+    // 4. 批量读取分销商链信息（单次 IN 查询 + 内存中建链）
+    const [agentRows] = await conn.query(
+      `SELECT a.user_id, a.level, a.status, t.parent_id
+       FROM agents a
+       LEFT JOIN teams t ON t.user_id = a.user_id
+       WHERE a.user_id IN (${agentUserIds.map(() => '?').join(',')}) AND a.status = 1`,
+      agentUserIds
+    );
+    const agentMap = {};
+    agentRows.forEach(a => { agentMap[a.user_id] = a; });
+
+    const settlements = [];
+
+    for (const o of orders) {
+      const chain = buildAgentChain(agentMap, o.direct_agent_id);
+      const price = parseFloat(o.price);
+
+      // L1
+      if (chain.L1) {
+        const amount = Math.round(price * (levelRates[chain.L1.level] ?? 0) * 100) / 100;
+        if (amount > 0) {
+          await conn.execute(
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+             VALUES (?, ?, 1, 'SALES', ?, 1, NOW())`,
+            [chain.L1.user_id, o.id, amount]
+          );
+          settlements.push({ userId: chain.L1.user_id, orderId: o.id, level: 1, amount });
+        }
+      }
+      // L2
+      if (chain.L2) {
+        const rate2 = levelRates[chain.L2.level] ?? 0;
+        const rate1 = levelRates[chain.L1?.level] ?? 0;
+        const diffRate = Math.max(0, rate2 - rate1);
+        const amount = Math.round(price * diffRate * 100) / 100;
+        if (amount > 0) {
+          await conn.execute(
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+             VALUES (?, ?, 2, 'SALES', ?, 1, NOW())`,
+            [chain.L2.user_id, o.id, amount]
+          );
+          settlements.push({ userId: chain.L2.user_id, orderId: o.id, level: 2, amount });
+        }
+      }
+      // L3
+      if (chain.L3) {
+        const rate3 = levelRates[chain.L3.level] ?? 0;
+        const rate2 = levelRates[chain.L2?.level] ?? 0;
+        const diffRate = Math.max(0, rate3 - rate2);
+        const amount = Math.round(price * diffRate * 100) / 100;
+        if (amount > 0) {
+          await conn.execute(
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+             VALUES (?, ?, 3, 'SALES', ?, 1, NOW())`,
+            [chain.L3.user_id, o.id, amount]
+          );
+          settlements.push({ userId: chain.L3.user_id, orderId: o.id, level: 3, amount });
+        }
+      }
+      // 推荐奖励
+      if (chain.L1) {
+        const buyerLevel = agentMap[o.user_id]?.level || 'DR';
+        const cfgKey = `referral_reward_${chain.L1.level.toLowerCase()}_${buyerLevel.toLowerCase()}`;
+        // 推荐奖励配置已在模块加载时校验，此处查单条
+        const [cfg] = await conn.query(
+          "SELECT value FROM configs WHERE `key` = ? LIMIT 1", [cfgKey]
+        );
+        const referralReward = parseFloat(cfg[0]?.value || 0);
+        if (referralReward > 0) {
+          await conn.execute(
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+             VALUES (?, ?, 1, 'REFERRAL', ?, 1, NOW())`,
+            [chain.L1.user_id, o.id, referralReward]
+          );
+        }
+      }
+    }
+
+    // 5. 批量标记已结算
+    if (settlements.length) {
+      const settledOrderIds = [...new Set(settlements.map(s => s.orderId))];
+      await conn.execute(
+        `UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id IN (${settledOrderIds.map(() => '?').join(',')})`,
+        settledOrderIds
+      );
+    }
+
+    return orders.length;
+  },
+
   async listByUser(userId, { page = 1, pageSize = 20, type, status } = {}) {
     const offset = (page - 1) * pageSize;
     const conditions = ['c.user_id = ?'];
@@ -301,6 +426,29 @@ const Commission = {
  * @param {number} buyerId - 购买人 user_id
  * @returns {Promise<{L1: object|null, L2: object|null, L3: object|null}>}
  */
+// 内存中从 agentMap 构建 L1/L2/L3 链（settleForOrdersBatch 用）
+function buildAgentChain(agentMap, startId) {
+  const result = { L1: null, L2: null, L3: null };
+  if (!startId) return result;
+  const visited = new Set();
+  let currentId = startId;
+  let depth = 0;
+  while (currentId && depth < 10 && !visited.has(currentId)) {
+    visited.add(currentId);
+    const a = agentMap[currentId];
+    if (a) {
+      const info = { user_id: a.user_id, level: a.level };
+      if (!result.L1) result.L1 = info;
+      else if (!result.L2) result.L2 = info;
+      else if (!result.L3) { result.L3 = info; break; }
+    }
+    if (a?.parent_id == null) break;
+    currentId = a?.parent_id;
+    depth++;
+  }
+  return result;
+}
+
 async function resolveAgentChain(conn, directAgentId, buyerId) {
   const result = { L1: null, L2: null, L3: null };
 

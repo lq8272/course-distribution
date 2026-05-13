@@ -56,16 +56,26 @@ router.put('/:id', auth, adminAuth, async (req, res) => {
 router.delete('/:id', auth, adminAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    // 检查是否有子分类
-    const [children] = await db.query(
-      'SELECT id FROM course_categories WHERE parent_id = ? LIMIT 1',
-      [id]
-    );
-    if (children.length) {
-      return fail(res, 400, 40000, '该分类下存在子分类，请先删除子分类');
+    const conn = await db.getConnection();
+    await conn.beginTransaction();
+    try {
+      // 检查是否有子分类（在事务内加锁，防止 TOCTOU 竞态）
+      const [children] = await conn.query(
+        'SELECT id FROM course_categories WHERE parent_id = ? LIMIT 1 FOR UPDATE',
+        [id]
+      );
+      if (children.length) {
+        await conn.rollback(); conn.release();
+        return fail(res, 400, 40000, '该分类下存在子分类，请先删除子分类');
+      }
+      await conn.execute('DELETE FROM course_categories WHERE id = ?', [id]);
+      await conn.commit();
+      conn.release();
+      ok(res, null);
+    } catch (e) {
+      await conn.rollback(); conn.release();
+      throw e;
     }
-    await db.execute('DELETE FROM course_categories WHERE id = ?', [id]);
-    ok(res, null);
   } catch (err) {
     console.error(err);
     return fail(res, 500, 50000, '删除失败');

@@ -24,8 +24,16 @@ const SystemConfig = {
       const { getRedis, REDIS_KEYS } = require('../config/redis');
       try {
         const redis = await getRedis();
-        const keys = await redis.keys('config:*');
-        if (keys.length > 0) await redis.del(...keys);
+        // 改用 SCAN 游标迭代，避免 KEYS 命令 O(N) 全量扫描阻塞 Redis
+        const pattern = 'config:*';
+        let cursor = '0';
+        const keysToDelete = [];
+        do {
+          const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+          cursor = nextCursor;
+          keysToDelete.push(...batch);
+        } while (cursor !== '0');
+        if (keysToDelete.length) await redis.del(...keysToDelete);
       } catch (_) {
         // Redis 不可用时不影响主流程
       }

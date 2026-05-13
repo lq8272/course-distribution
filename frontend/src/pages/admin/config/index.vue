@@ -86,7 +86,7 @@
           <view class="config-item">
             <view class="config-label">提现手续费率</view>
             <view class="input-row">
-              <input class="config-input" v-model="form.withdraw_fee_rate" type="digit" placeholder="0" />
+
               <text class="input-suffix">（0 = 免手续费）</text>
             </view>
           </view>

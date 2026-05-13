@@ -146,21 +146,17 @@ const Agent = {
       //    分批更新，每次最多 1000 条，防止深递归大事务
       await updateDescendantsRootId(conn, agent.user_id, agent.user_id);
 
-      // 8. 补偿历史订单 — 下单时分销商尚在待审核（status=0），佣金未结算；
-      //    审核通过后，对该分销商所有已确认（status=1）且未结算的历史订单补结佣金
-      //    directAgentId 字段在下单时已正确记录（推广码对应分销商的 user_id）
+      // 8. 补偿历史订单（批量结算，消除 N+1 查询）
       const [unsettledOrders] = await conn.query(
         `SELECT id FROM orders
          WHERE direct_agent_id = ? AND status = 1 AND commission_settled = 0
          LIMIT 500`,
         [agent.user_id]
       );
-      for (const row of unsettledOrders) {
-        // settleForOrder 内部检查 commission_settled=0，幂等防重
-        await Commission.settleForOrder(row.id, conn);
-      }
       if (unsettledOrders.length > 0) {
-        console.log(`[approve] 补偿结算 ${unsettledOrders.length} 笔历史订单，agent.user_id=${agent.user_id}`);
+        const orderIds = unsettledOrders.map(r => r.id);
+        const settled = await Commission.settleForOrdersBatch(orderIds, conn);
+        console.log(`[approve] 批量补偿结算 ${settled} 笔历史订单，agent.user_id=${agent.user_id}`);
       }
 
       await conn.commit();

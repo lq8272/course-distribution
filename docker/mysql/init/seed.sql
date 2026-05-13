@@ -35,7 +35,7 @@ INSERT INTO configs (`key`, value, description) VALUES
   ('recommend_reward',    '10.00', '推荐奖励金额（元）'),
   -- 提现
   ('min_withdraw_amount',  '100',   '最低提现额度（元）'),
-  ('withdraw_fee_rate',   '0',     '提现手续费率（0=免手续费）'),
+
   -- 订单
   ('order_timeout_minutes','30',   '订单超时关闭时间（分钟）'),
   -- 拿货配置（真实数据在 agent_level_configs 表）

@@ -31,7 +31,7 @@ INSERT INTO configs (`key`, value, description) VALUES
   ('platform_name',         '视频课程分销平台',    '平台名称'),
   ('platform_root_user_id', '1',                   '平台根用户ID（固定值，不做运算）'),
   ('min_withdraw_amount',   '100',                 '最低提现额度（元）'),
-  ('withdraw_fee_rate',     '0',                    '提现手续费率（0=免手续费）'),
+
   ('order_timeout_minutes', '30',                   '订单超时关闭时间（分钟）'),
   ('max_distribution_level','3',                    '最大分销层级'),
   ('level1_rebate_rate',    '0.3000',               '一级分销返佣比例'),

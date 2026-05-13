@@ -20,24 +20,23 @@ router.post('/create', auth, async (req, res) => {
     const course = await Course.findById(courseIdInt);
     if (!course) return fail(res, 404, 40400, '课程不存在');
 
-    // 查询推广码对应的分销商 user_id，并记录一次访问
+    // 查询推广码对应的分销商 user_id（JOIN 合并两查询），并记录一次访问
     let directAgentId = null;
     let agentDbId = null; // agents.id
     if (promotion_code) {
-      const codeRows = await db.query(
-        'SELECT user_id FROM promotion_codes WHERE code = ? LIMIT 1',
+      // 推广码 + 分销商状态一次查询搞定
+      const rows = await db.query(
+        `SELECT pc.user_id, a.id as agent_id
+         FROM promotion_codes pc
+         LEFT JOIN agents a ON a.user_id = pc.user_id AND a.status = 1
+         WHERE pc.code = ? LIMIT 1`,
         [promotion_code]
       );
-      console.log(`[OrderCreate] promotion_code=${promotion_code}, codeRows=`, JSON.stringify(codeRows));
-      if (codeRows.length) {
-        directAgentId = codeRows[0].user_id;
+      console.log(`[OrderCreate] promotion_code=${promotion_code}, codeRows=`, JSON.stringify(rows));
+      if (rows.length && rows[0].user_id != null) {
+        directAgentId = rows[0].user_id;
+        agentDbId = rows[0].agent_id || null;
         console.log(`[OrderCreate] directAgentId=${directAgentId}`);
-        const agentRows = await db.query(
-          'SELECT id FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
-          [directAgentId]
-        );
-        console.log(`[OrderCreate] agents lookup=`, JSON.stringify(agentRows));
-        if (agentRows.length) agentDbId = agentRows[0].id;
         // 更新推广码访问计数（FOR UPDATE 锁防止并发丢失更新）
         await db.query(
           'UPDATE promotion_codes SET visit_count = visit_count + 1 WHERE code = ? FOR UPDATE',
@@ -117,8 +116,16 @@ router.post('/:id/confirm', auth, async (req, res) => {
     // 佣金已在 Order.confirm() 内部事务中结算完毕（T+0），此处不再重复调用
     // 仅清除团队树缓存
     const redis = getRedis();
-    const keys = await redis.keys(`team:tree:*`);
-    if (keys.length) await redis.del(...keys);
+    // 改用 SCAN 游标迭代，避免 KEYS 命令 O(N) 全量扫描阻塞 Redis
+    const pattern = `team:tree:*`;
+    let cursor = '0';
+    const keysToDelete = [];
+    do {
+      const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+      cursor = nextCursor;
+      keysToDelete.push(...batch);
+    } while (cursor !== '0');
+    if (keysToDelete.length) await redis.del(...keysToDelete);
 
     ok(res, { status: 1 });
   } catch (err) {
