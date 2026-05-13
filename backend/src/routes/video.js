@@ -186,6 +186,14 @@ router.post('/notify', async (req, res) => {
 
       const courseId = parseInt(match[1]);
 
+      // 校验课程存在性，防止伪造key更新不存在的课程
+      const [courses] = await db.query('SELECT id FROM courses WHERE id = ?', [courseId]);
+      if (!courses.length) {
+        console.error('[video/notify] 课程不存在:', courseId);
+        results.push({ key, success: false, error: '课程不存在' });
+        continue;
+      }
+
       // 更新数据库：video_url 存原始m3u8的key（不含域名）
       await db.execute(
         'UPDATE courses SET video_url = ?, updated_at = NOW() WHERE id = ?',

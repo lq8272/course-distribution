@@ -7,13 +7,13 @@ function rateLimit({ windowSec = 60, max = 60, keyPrefix = 'ratelimit' } = {}) {
   return async (req, res, next) => {
     const env = process.env.NODE_ENV;
     const isTest = env === 'test' || env === 'testing';
-    const bypass = req.query && req.query.__test_bypass === '1';
-    const shouldBypass = isTest || bypass;
 
-    // 强制打印到 stdout（确保能在 docker logs 看到）
-    console.log(`[RATELIMIT-MW] path=${req.path} env=${env} bypass=${shouldBypass} ip=${req.ip}`);
+    // 生产环境不打印限流日志，避免stdout污染 + 暴露IP
+    if (env !== 'production') {
+      console.log(`[RATELIMIT-MW] path=${req.path} env=${env} ip=${req.ip}`);
+    }
 
-    if (shouldBypass) {
+    if (isTest) {
       return next();
     }
 

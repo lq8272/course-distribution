@@ -37,9 +37,9 @@ router.post('/create', auth, async (req, res) => {
         directAgentId = rows[0].user_id;
         agentDbId = rows[0].agent_id || null;
         console.log(`[OrderCreate] directAgentId=${directAgentId}`);
-        // 更新推广码访问计数（FOR UPDATE 锁防止并发丢失更新）
+        // 更新推广码访问计数（允许少量计数丢失，不加行锁避免高并发阻塞）
         await db.query(
-          'UPDATE promotion_codes SET visit_count = visit_count + 1 WHERE code = ? FOR UPDATE',
+          'UPDATE promotion_codes SET visit_count = visit_count + 1 WHERE code = ?',
           [promotion_code]
         );
       }

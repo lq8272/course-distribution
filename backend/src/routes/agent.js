@@ -54,6 +54,8 @@ router.post('/apply', auth, async (req, res) => {
   try {
     const { level, gift_quantity = 0, recommender_id } = req.body;
     if (!level) return fail(res, 400, 40000, '请选择分销等级');
+    const qty = parseInt(gift_quantity) || 0;
+    if (qty < 0 || qty > 9999) return fail(res, 400, 40000, '礼品数量需在0-9999之间');
 
     const existing = await Agent.findByUserId(req.user.id);
     if (existing && existing.status === 1) return fail(res, 400, 40000, '您已是分销商，请联系管理员');

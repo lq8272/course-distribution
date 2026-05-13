@@ -89,10 +89,10 @@ router.post('/messages/:conversationId', auth, adminAuth, async (req, res) => {
     if (!content) return fail(res, 400, 40000, '内容不能为空');
 
     const convRows = await db.query(
-      `SELECT * FROM customer_services WHERE id = ? LIMIT 1`,
+      `SELECT * FROM customer_services WHERE id = ? AND user_id IS NOT NULL LIMIT 1`,
       [req.params.conversationId]
     );
-    if (!convRows.length) return fail(res, 404, 40400, '会话不存在');
+    if (!convRows.length) return fail(res, 404, 40400, '会话不存在或归属异常');
 
     const result = await db.query(
       `INSERT INTO customer_messages (conversation_id, sender_id, content, is_read, is_from_admin, admin_id, created_at)

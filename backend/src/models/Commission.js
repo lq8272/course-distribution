@@ -162,7 +162,7 @@ const Commission = {
       if (shouldRelease) conn.release();
       return settlements;
     } catch (e) {
-      if (shouldCommit) await conn.rollback();
+      await conn.rollback();  // 空事务回滚无害，始终回滚确保连接不泄漏
       if (shouldRelease) conn.release();
       throw e;
     }

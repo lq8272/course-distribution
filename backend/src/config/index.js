@@ -6,20 +6,21 @@ const _jwtSecret = process.env.JWT_SECRET;
 const _jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
 
 if (_nodeEnv === 'production') {
-  if (!_jwtSecret || !_jwtRefreshSecret) {
-    console.error('========================================');
-    console.error('[FATAL] 生产环境必须设置 JWT_SECRET 和 JWT_REFRESH_SECRET');
-    console.error('请在 .env.production 中配置这两个环境变量');
-    console.error('========================================');
-    process.exit(1);
-  }
-  const forbidden = ['dev_secret', 'dev_refresh_secret', 'your-secret-key', 'CHANGE_THIS'];
-  if (forbidden.includes(_jwtSecret) || forbidden.includes(_jwtRefreshSecret)) {
-    console.error('========================================');
-    console.error('[FATAL] JWT_SECRET / JWT_REFRESH_SECRET 不能使用默认占位符');
-    console.error('请生成随机密钥: openssl rand -base64 64');
-    console.error('========================================');
-    process.exit(1);
+  const requiredSecrets = {
+    JWT_SECRET: _jwtSecret,
+    JWT_REFRESH_SECRET: _jwtRefreshSecret,
+    DB_PASSWORD: process.env.DB_PASSWORD,
+    REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  };
+  const forbidden = ['dev_secret', 'dev_refresh_secret', 'your-secret-key', 'CHANGE_THIS', 'password', '123456', ''];
+  for (const [name, value] of Object.entries(requiredSecrets)) {
+    if (!value || forbidden.includes(value)) {
+      console.error('========================================');
+      console.error(`[FATAL] 生产环境必须设置安全的 ${name}，禁止使用占位符或默认值`);
+      console.error(`请在 .env.production 中配置: ${name}=<随机值>`);
+      console.error('========================================');
+      process.exit(1);
+    }
   }
 }
 

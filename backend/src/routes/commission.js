@@ -52,7 +52,10 @@ router.get('/stats', auth, async (req, res) => {
 router.post('/withdraw', auth, async (req, res) => {
   try {
     const { amount } = req.body;
-    if (!amount || amount <= 0) return fail(res, 400, 40000, '请输入有效金额');
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) return fail(res, 400, 40000, '请输入有效金额');
+    const maxWithdraw = parseFloat(process.env.MAX_WITHDRAW_SINGLE || '100000');
+    if (amountNum > maxWithdraw) return fail(res, 400, 40000, `单次提现金额不能超过${maxWithdraw}元`);
 
     // 事务内：锁定可用佣金 → 校验余额 → 扣除 → 写入提现记录
     const conn = await db.getConnection();
