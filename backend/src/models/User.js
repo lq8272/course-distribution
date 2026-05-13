@@ -71,8 +71,9 @@ const User = {
    */
   async findAdminByCredentials(username, password) {
     if (!username || !password) return null;
+    // 必须是 is_admin=1 才算管理员
     const rows = await db.query(
-      `SELECT * FROM users WHERE (phone = ? OR id = ? OR openid = ? OR nickname = ?) AND admin_password IS NOT NULL LIMIT 1`,
+      `SELECT * FROM users WHERE is_admin = 1 AND (phone = ? OR id = ? OR openid = ? OR nickname = ?) AND admin_password IS NOT NULL LIMIT 1`,
       [username, Number.isInteger(Number(username)) ? Number(username) : -1, username, username]
     );
     if (!rows.length) return null;

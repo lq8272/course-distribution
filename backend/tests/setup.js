@@ -5,7 +5,7 @@
  */
 const http = require('http');
 
-const API_BASE = process.env.TEST_API || 'http://localhost:3000/api';
+const API_BASE = process.env.TEST_API || 'http://localhost:3000/api/v1';
 
 /**
  * 发送 HTTP 请求

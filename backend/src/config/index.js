@@ -54,7 +54,7 @@ module.exports = {
   jwt: {
     secret: _jwtSecret || 'dev_secret',
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-    refreshSecret: _jwtRefreshSecret || 'dev_refresh_secret',
+    refreshSecret: _jwtRefreshSecret || _jwtSecret || 'dev_refresh_secret',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
 

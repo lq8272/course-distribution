@@ -123,6 +123,7 @@ app.get('/api/metrics', (req, res) => {
 // 测试环境下（NODE_ENV=test）将限额临时调高，避免自动化测试触发 429
 if (process.env.NODE_ENV !== 'test') {
   app.use('/api/v1/auth/login', rateLimit({ windowSec: 60, max: 10, keyPrefix: 'login' }));
+  app.use('/api/v1/admin/login', rateLimit({ windowSec: 60, max: 10, keyPrefix: 'admin_login' }));
   app.use('/api/v1/order/create', rateLimit({ windowSec: 60, max: 15, keyPrefix: 'order' }));
   app.use('/api/v1/commission/withdraw', rateLimit({ windowSec: 60, max: 15, keyPrefix: 'withdraw' }));
 }
