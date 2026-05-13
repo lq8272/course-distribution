@@ -126,9 +126,14 @@ const Order = {
     const conn = await db.getConnection();
     await conn.beginTransaction();
     try {
+      // 幂等检查：只有已结算的订单才能退款
       const [rows] = await conn.query('SELECT * FROM orders WHERE id = ? FOR UPDATE', [id]);
       if (!rows.length || rows[0].status !== 1) {
         await conn.rollback(); conn.release(); return null;
+      }
+      // 幂等检查：订单 status=1 但 commission_settled=0（未结算过佣金），无需撤销
+      if (rows[0].commission_settled === 0) {
+        await conn.rollback(); conn.release(); return rows[0];
       }
       await conn.execute('UPDATE orders SET status = 3 WHERE id = ? AND status = 1', [id]);
       await Commission.revokeForOrder(id, conn);

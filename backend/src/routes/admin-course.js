@@ -92,33 +92,48 @@ router.put('/:id', async (req, res) => {
 
 // DELETE /api/admin/course/:id
 router.delete('/:id', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id || isNaN(id)) return fail(res, 400, 40000, '无效的课程ID');
+
+  const conn = await db.getConnection();
   try {
-    const id = parseInt(req.params.id);
-    const course = await Course.findById(id);
-    if (!course) return fail(res, 404, 40400, '课程不存在');
+    await conn.beginTransaction();
 
-    // 删除七牛视频文件
+    // FOR UPDATE 锁定课程记录，防止并发删除
+    const [rows] = await conn.query(
+      'SELECT id, video_key FROM courses WHERE id = ? FOR UPDATE',
+      [id]
+    );
+    if (!rows.length) {
+      await conn.rollback();
+      return fail(res, 404, 40400, '课程不存在');
+    }
+    const course = rows[0];
+
+    // 删除关联的佣金记录、订单记录（子查询在事务内原子执行）
+    await conn.execute(
+      'DELETE FROM commissions WHERE order_id IN (SELECT id FROM orders WHERE course_id = ?)',
+      [id]
+    );
+    await conn.execute('DELETE FROM orders WHERE course_id = ?', [id]);
+    await conn.execute('DELETE FROM courses WHERE id = ?', [id]);
+
+    await conn.commit();
+
+    // 事务成功后异步删除七牛视频文件（不影响主流程）
     if (course.video_key) {
-      try {
-        await videoService.deleteFile(course.video_key);
-      } catch (e) {
+      videoService.deleteFile(course.video_key).catch(e => {
         console.warn('删除七牛视频失败:', e.message);
-      }
+      });
     }
 
-    // 先删关联的佣金记录、订单记录，再删课程
-    const conn = await db.getConnection();
-    try {
-      await conn.execute('DELETE FROM commissions WHERE order_id IN (SELECT id FROM orders WHERE course_id = ?)', [id]);
-      await conn.execute('DELETE FROM orders WHERE course_id = ?', [id]);
-      await conn.execute('DELETE FROM courses WHERE id = ?', [id]);
-    } finally {
-      conn.release();
-    }
     ok(res, null);
   } catch (err) {
+    await conn.rollback();
     console.error('[admin-course DELETE]', err);
     return fail(res, 500, 50000, '删除失败');
+  } finally {
+    conn.release();
   }
 });
 
