@@ -124,10 +124,12 @@ function init(server) {
 
   console.log('[WS] WebSocket 服务初始化完成，共享 HTTP server，path=/ws');
 
-// 订阅：推给客户端（用户）
-getRedisSub().subscribe(CHANNEL_TO_CLIENT, (err) => {
-  if (err) console.error('[WS] 订阅 CHANNEL_TO_CLIENT 失败:', err.message);
-});
+// ── 订阅：推给客户端（用户）──
+function subscribeToClientChannel() {
+  getRedisSub().subscribe(CHANNEL_TO_CLIENT, (err) => {
+    if (err) console.error('[WS] 订阅 CHANNEL_TO_CLIENT 失败:', err.message);
+  });
+}
 getRedisSub().on('message', (channel, message) => {
   if (channel !== CHANNEL_TO_CLIENT) return;
   try {
@@ -137,17 +139,24 @@ getRedisSub().on('message', (channel, message) => {
     console.error('[WS] 处理推送消息失败:', e.message);
   }
 });
+// Redis 重连后重新订阅
+getRedisSub().on('ready', () => {
+  console.log('[WS] Redis Sub 已重连，重新订阅频道...');
+  subscribeToClientChannel();
+});
 
-// 订阅：推给所有管理员（独立客户端，避免 subscribe 上下文冲突）
+// ── 订阅：推给所有管理员（独立客户端，避免 subscribe 上下文冲突）──
 const adminRedisSub = new Redis({
   host: config.redis.host,
   port: config.redis.port,
   password: config.redis.password || undefined,
   retryStrategy: (times) => Math.min(times * 50, 2000),
 });
-adminRedisSub.subscribe(CHANNEL_TO_ADMIN, (err) => {
-  if (err) console.error('[WS] 订阅 CHANNEL_TO_ADMIN 失败:', err.message);
-});
+function subscribeToAdminChannel() {
+  adminRedisSub.subscribe(CHANNEL_TO_ADMIN, (err) => {
+    if (err) console.error('[WS] 订阅 CHANNEL_TO_ADMIN 失败:', err.message);
+  });
+}
 adminRedisSub.on('message', (channel, message) => {
   if (channel !== CHANNEL_TO_ADMIN) return;
   try {
@@ -157,6 +166,15 @@ adminRedisSub.on('message', (channel, message) => {
     console.error('[WS] 处理管理员推送失败:', e.message);
   }
 });
+// Redis 重连后重新订阅
+adminRedisSub.on('ready', () => {
+  console.log('[WS] Admin Redis Sub 已重连，重新订阅频道...');
+  subscribeToAdminChannel();
+});
+
+// 初始化订阅
+subscribeToClientChannel();
+subscribeToAdminChannel();
 
 console.log('[WS] WebSocket 服务初始化完成');
 }

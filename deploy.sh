@@ -214,6 +214,37 @@ cmd_stop() {
   log_info "服务已停止"
 }
 
+# ---------- 启动监控服务 ----------
+cmd_monitoring() {
+  log_info "启动监控服务（Prometheus + Grafana + Alertmanager）..."
+
+  set -a
+  source "$PROJECT_ROOT/.env.production"
+  set +a
+
+  docker compose -f "$PROJECT_ROOT/docker-compose.yml" \
+                 -f "$PROJECT_ROOT/docker-compose.monitoring.yml" \
+                 --profile monitoring up -d
+
+  log_info "监控服务已启动："
+  log_info "  Prometheus:   http://localhost:9090"
+  log_info "  Grafana:      http://localhost:3001"
+  log_info "  Alertmanager: http://localhost:9093"
+  log_info ""
+  log_warn "告警 Webhook 配置："
+  log_warn "  ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-未设置}"
+  log_warn "  ALERT_WEBHOOK_CRITICAL_URL=${ALERT_WEBHOOK_CRITICAL_URL:-未设置}"
+}
+
+# ---------- 停止监控服务 ----------
+cmd_monitoring_stop() {
+  log_info "停止监控服务..."
+  docker compose -f "$PROJECT_ROOT/docker-compose.yml" \
+                 -f "$PROJECT_ROOT/docker-compose.monitoring.yml" \
+                 --profile monitoring down
+  log_info "监控服务已停止"
+}
+
 # ---------- 主入口 ----------
 case "${1:-}" in
   init)
@@ -234,15 +265,23 @@ case "${1:-}" in
   health)
     health_check
     ;;
+  monitoring)
+    cmd_monitoring
+    ;;
+  monitoring-stop)
+    cmd_monitoring_stop
+    ;;
   *)
-    echo "用法: $0 {init|deploy|status|logs|stop|health}"
+    echo "用法: $0 {init|deploy|status|logs|stop|health|monitoring|monitoring-stop}"
     echo ""
-    echo "  init    — 首次部署（构建+启动）"
-    echo "  deploy  — 更新部署（只重新构建+重启变更服务）"
-    echo "  status  — 查看服务状态"
-    echo "  logs    — 查看日志（可指定服务名）"
-    echo "  stop    — 停止所有服务"
-    echo "  health  — 健康检查"
+    echo "  init              — 首次部署（构建+启动）"
+    echo "  deploy            — 更新部署（只重新构建+重启变更服务）"
+    echo "  status            — 查看服务状态"
+    echo "  logs              — 查看日志（可指定服务名）"
+    echo "  stop              — 停止所有服务"
+    echo "  health            — 健康检查"
+    echo "  monitoring        — 启动监控服务（Prometheus+Grafana+Alertmanager）"
+    echo "  monitoring-stop   — 停止监控服务"
     exit 1
     ;;
 esac

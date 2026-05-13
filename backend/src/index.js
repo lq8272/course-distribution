@@ -86,6 +86,15 @@ app.get('/api/metrics', (req, res) => {
   const poolStatus = pool._pool ? pool._pool._allConnections?.length || 0 : 0;
   const poolFree   = pool._pool ? pool._pool._freeConnections?.length || 0 : 0;
 
+  // WebSocket 连接数统计
+  let wsTotal = 0, wsUsers = 0, wsAdmins = 0;
+  try {
+    const stats = wsService.getStats();
+    wsTotal = stats.total || 0;
+    wsUsers = stats.users || 0;
+    wsAdmins = stats.admins || 0;
+  } catch {}
+
   // Node.js 运行时指标
   const lines = [
     `# HELP nodejs_memory_heap_used_bytes Node.js heap used bytes`,
@@ -112,6 +121,15 @@ app.get('/api/metrics', (req, res) => {
     `# HELP redis_connected Redis connection status (1=connected)`,
     `# TYPE redis_connected gauge`,
     `redis_connected ${getRedis().status === 'ready' ? 1 : 0}`,
+    `# HELP websocket_connections_total WebSocket total connections`,
+    `# TYPE websocket_connections_total gauge`,
+    `websocket_connections_total ${wsTotal}`,
+    `# HELP websocket_users_total WebSocket unique users`,
+    `# TYPE websocket_users_total gauge`,
+    `websocket_users_total ${wsUsers}`,
+    `# HELP websocket_admins_total WebSocket admin connections`,
+    `# TYPE websocket_admins_total gauge`,
+    `websocket_admins_total ${wsAdmins}`,
   ];
 
   res.set('Content-Type', 'text/plain; charset=utf-8');

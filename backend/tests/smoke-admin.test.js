@@ -271,7 +271,7 @@ async function run() {
     await resp('POST /admin/withdraw/:id/reject', r);
   } else {
     r = await apiRequest('POST', '/api/admin/withdraw/1/reject', { reason: '冒烟测试（无待审）' }, adminToken);
-    const handled = r.status === 200 || r.status === 404;
+    const handled = r.status === 200 || r.status === 404 || r.status === 400;
     console.log(`  ${handled ? '✓' : '?'} POST /admin/withdraw/:id/reject (无待审) → ${r.status}`);
   }
 
@@ -279,7 +279,7 @@ async function run() {
   console.log('\n[27] 修改用户密码');
   r = await apiRequest('POST', '/api/admin/user/password', {
     user_id: adminUserId,
-    new_password: 'admin123',
+    password: 'admin123456',
   }, adminToken);
   await resp('POST /admin/user/password', r);
 

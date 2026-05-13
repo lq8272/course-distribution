@@ -1,4 +1,5 @@
-// 用户状态管理 - Pinia 版本
+// 用户状态管理 - Pinia 版本（唯一 store 文件）
+// 注意：之前存在两个 user store 文件，另一个 frontend/store/user.js 已删除（孤立文件，无任何 import）
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 

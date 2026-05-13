@@ -1,13 +1,19 @@
 # ============================================================
-# docker-compose.monitoring.yml — 监控服务（Prometheus + Grafana）
+# docker-compose.monitoring.yml — 监控服务（Prometheus + Grafana + Alertmanager）
 #
 # 使用方式：
-#   开发环境：docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#   开发环境：docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile monitoring up -d
 #   生产环境：docker-compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.monitoring.yml --profile monitoring up -d
+#   或使用 deploy.sh：./deploy.sh monitoring
 #
 # 访问地址：
-#   Prometheus: http://localhost:9090
-#   Grafana:   http://localhost:3001 (admin / admin123)
+#   Prometheus:   http://localhost:9090
+#   Grafana:     http://localhost:3001 (admin / admin123)
+#   Alertmanager: http://localhost:9093
+#
+# 告警配置（环境变量）：
+#   ALERT_WEBHOOK_URL           — 普通告警 Webhook（Discord/Telegram/Slack）
+#   ALERT_WEBHOOK_CRITICAL_URL  — 关键告警 Webhook（可单独配置紧急通知渠道）
 # ============================================================
 
 services:
@@ -23,13 +29,34 @@ services:
     volumes:
       - ./docker/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - ./docker/monitoring/prometheus/alertmanager.yml:/etc/prometheus/alertmanager.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.console.templates=/etc/prometheus/console_templates'
+      - '--web.enable-lifecycle'
+      - '--alertmanager.url=http://alertmanager:9093'
+    networks:
+      - default
+
+  # --------------- Alertmanager 告警分发 ---------------
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: course_alertmanager
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./docker/monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
       - '--web.enable-lifecycle'
     networks:
       - default
@@ -59,3 +86,4 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
+  alertmanager_data:

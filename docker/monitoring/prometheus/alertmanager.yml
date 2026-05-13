@@ -1,0 +1,48 @@
+# Alertmanager 配置
+# 支持 Discord / Telegram / Slack Webhook
+# 环境变量占位符，用户可自行配置
+
+global:
+  resolve_timeout: 5m
+
+# 路由配置
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'webhook'
+  routes:
+    # 关键告警立即通知
+    - match:
+        severity: critical
+      receiver: 'webhook-critical'
+      continue: true
+    # 警告级别告警
+    - match:
+        severity: warning
+      receiver: 'webhook'
+
+# 接收者配置
+receivers:
+  # 普通告警（webhook）
+  - name: 'webhook'
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_URL:-http://placeholder}'
+        send_resolved: true
+        max_alerts: 10
+
+  # 关键告警（可单独配置紧急通知渠道）
+  - name: 'webhook-critical'
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_CRITICAL_URL:-${ALERT_WEBHOOK_URL:-http://placeholder}}'
+        send_resolved: true
+        max_alerts: 50
+
+# 抑制规则（可选）
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

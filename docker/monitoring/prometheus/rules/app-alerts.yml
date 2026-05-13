@@ -81,6 +81,15 @@ groups:
           summary: "Redis 连接断开"
           description: "Redis 连接状态异常，服务将无法正常使用缓存和限流功能"
 
+      - alert: WebSocketNoConnections
+        expr: websocket_connections_total{job="course-backend"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket 无连接（可能服务异常）"
+          description: "WebSocket 无任何连接持续超过 10 分钟"
+
       # ==================== 业务告警 ====================
 
       - alert: WithdrawApprovalStuck

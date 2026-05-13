@@ -78,10 +78,8 @@ class WSManager {
         console.log('[WS] 收到消息', msg.event, msg.data);
         this._dispatch(msg);
       } catch (err) {
-        // 非 JSON 原文（可能是 ping）
-        if (e.data === 'pong') {
-          this.lastPongAt = Date.now();
-        }
+        // 非 JSON 原文（目前服务端不发送明文 ping/pong，只有 JSON 格式）
+        console.warn('[WS] 消息解析失败:', e.data);
       }
     });
 
