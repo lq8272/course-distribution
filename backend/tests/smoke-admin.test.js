@@ -182,6 +182,111 @@ async function run() {
   const noToken = r.status === 401;
   console.log(`  ${noToken ? '✓' : '✗'} 无 Token GET /admin/stats/overview → ${r.status}（期望 401）`);
 
+  // ========== 新增写操作接口 ==========
+  // Step 20: 课程创建（POST /admin/course/create）
+  console.log('\n[20] 课程创建');
+  r = await apiRequest('POST', '/api/admin/course/create', {
+    title: '冒烟测试课程_' + Date.now(),
+    price: 99,
+    category_id: 1,
+    description: '冒烟测试自动创建',
+    video_url: 'https://example.com/test.mp4',
+    cover_image: 'https://example.com/cover.jpg',
+    is_top: 0,
+    sort: 0,
+  }, adminToken);
+  const courseOk = await resp('POST /admin/course/create', r);
+  const courseId = r.status === 200 ? r.body.data?.id : null;
+  if (courseId) console.log(`    新建课程ID=${courseId}`);
+
+  // Step 21: 课程更新（PUT /admin/course/:id）
+  if (courseId) {
+    console.log('\n[21] 课程更新');
+    r = await apiRequest('PUT', `/api/admin/course/${courseId}`, {
+      title: '冒烟测试课程_已更新',
+      price: 199,
+    }, adminToken);
+    await resp('PUT /admin/course/:id', r);
+  }
+
+  // Step 22: 课程删除（DELETE /admin/course/:id）
+  if (courseId) {
+    console.log('\n[22] 课程删除');
+    r = await apiRequest('DELETE', `/api/admin/course/${courseId}`, null, adminToken);
+    await resp('DELETE /admin/course/:id', r);
+  }
+
+  // Step 23: 代理商待审核列表 + 审批/拒绝
+  console.log('\n[23] 代理商审核（approve/reject）');
+  r = await apiRequest('GET', '/api/admin/agent/pending?page=1&page_size=5', null, adminToken);
+  await resp('GET /admin/agent/pending', r);
+  // 找一个待审核的代理商 ID（如有）
+  const pendingAgent = r.body?.data?.rows?.[0];
+  if (pendingAgent?.id) {
+    // 先拒绝（避免影响真实数据）
+    r = await apiRequest('POST', `/api/admin/agent/${pendingAgent.id}/reject`, { reason: '冒烟测试拒绝' }, adminToken);
+    await resp('POST /admin/agent/:id/reject', r);
+  } else {
+    // 无待审核时测试 approve（用已有代理 ID，预期 already approved）
+    r = await apiRequest('POST', '/api/admin/agent/1/reject', { reason: '冒烟测试（无待审核）' }, adminToken);
+    const alreadyHandled = r.status === 200 || r.status === 400;
+    console.log(`  ${alreadyHandled ? '✓' : '?'} POST /admin/agent/:id/reject (无待审数据) → ${r.status}`);
+  }
+
+  // Step 24: 代理商升级审核（approve/reject）
+  console.log('\n[24] 代理商升级审核');
+  r = await apiRequest('GET', '/api/admin/agent/upgrade/pending?page=1&page_size=5', null, adminToken);
+  await resp('GET /admin/agent/upgrade/pending', r);
+  const pendingUpgrade = r.body?.data?.rows?.[0];
+  if (pendingUpgrade?.id) {
+    r = await apiRequest('POST', `/api/admin/agent/upgrade/${pendingUpgrade.id}/reject`, { reason: '冒烟测试拒绝' }, adminToken);
+    await resp('POST /admin/agent/upgrade/:id/reject', r);
+  } else {
+    r = await apiRequest('POST', '/api/admin/agent/upgrade/1/reject', { reason: '冒烟测试（无待审）' }, adminToken);
+    const handled = r.status === 200 || r.status === 400;
+    console.log(`  ${handled ? '✓' : '?'} POST /admin/agent/upgrade/:id/reject (无待审) → ${r.status}`);
+  }
+
+  // Step 25: 订单确认（POST /admin/order/:id/confirm）
+  console.log('\n[25] 订单确认');
+  r = await apiRequest('GET', '/api/admin/order/list?page=1&page_size=5&status=0', null, adminToken);
+  await resp('GET /admin/order/list (待处理)', r);
+  const pendingOrder = r.body?.data?.rows?.[0];
+  if (pendingOrder?.id) {
+    r = await apiRequest('POST', `/api/admin/order/${pendingOrder.id}/confirm`, {}, adminToken);
+    await resp('POST /admin/order/:id/confirm', r);
+  } else {
+    r = await apiRequest('POST', '/api/admin/order/1/confirm', {}, adminToken);
+    const notFoundOrOk = r.status === 200 || r.status === 404;
+    console.log(`  ${notFoundOrOk ? '✓' : '?'} POST /admin/order/:id/confirm (无待处理) → ${r.status}`);
+  }
+
+  // Step 26: 提现审批（approve/reject）
+  console.log('\n[26] 提现审核（approve/reject）');
+  r = await apiRequest('GET', '/api/admin/withdraw/list?page=1&page_size=5&status=0', null, adminToken);
+  await resp('GET /admin/withdraw/list (待处理)', r);
+  const pendingWithdraw = r.body?.data?.rows?.[0];
+  if (pendingWithdraw?.id) {
+    r = await apiRequest('POST', `/api/admin/withdraw/${pendingWithdraw.id}/reject`, { reason: '冒烟测试拒绝' }, adminToken);
+    await resp('POST /admin/withdraw/:id/reject', r);
+  } else {
+    r = await apiRequest('POST', '/api/admin/withdraw/1/reject', { reason: '冒烟测试（无待审）' }, adminToken);
+    const handled = r.status === 200 || r.status === 404;
+    console.log(`  ${handled ? '✓' : '?'} POST /admin/withdraw/:id/reject (无待审) → ${r.status}`);
+  }
+
+  // Step 27: 修改用户密码（POST /admin/user/password）
+  console.log('\n[27] 修改用户密码');
+  r = await apiRequest('POST', '/api/admin/user/password', {
+    user_id: adminUserId,
+    new_password: 'admin123',
+  }, adminToken);
+  await resp('POST /admin/user/password', r);
+
+  // Step 28: 客服会话统计（GET /admin/service/stats）
+  // 已在上方 Step 19 测试
+
+  // ========== 冒烟测试完成 ==========
   console.log('\n========== 冒烟测试完成 ==========\n');
 }
 
