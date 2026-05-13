@@ -14,7 +14,10 @@ router.get('/overview', auth, async (req, res) => {
   try {
     const redis = getRedis();
     const cacheKey = REDIS_KEYS.TEAM_OVERVIEW(req.user.id);
-    const cached = await redis.get(cacheKey);
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKey);
+    } catch (_) {}
     if (cached) return ok(res, JSON.parse(cached));
 
     const agent = await Agent.findActive(req.user.id);
@@ -33,7 +36,9 @@ router.get('/overview', auth, async (req, res) => {
       Team.stats(req.user.id),
     ]);
     const data = { is_agent: true, agent: { ...agent, level_name }, parent, children, stats };
-    await redis.set(cacheKey, JSON.stringify(data), 'EX', 300);
+    try {
+      await redis.set(cacheKey, JSON.stringify(data), 'EX', 300);
+    } catch (_) {}
     ok(res, data);
   } catch (err) {
     console.error(err);
@@ -52,14 +57,19 @@ router.get('/tree', auth, async (req, res) => {
     const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
     const depthNum = parseInt(depth, 10);
     const cacheKeyPaged = `${cacheKey}:p:${pageNum}:${pageSizeNum}:d:${depthNum}`;
-    const cached = await redis.get(cacheKeyPaged);
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKeyPaged);
+    } catch (_) {}
     if (cached) return ok(res, JSON.parse(cached));
 
     const agent = await Agent.findActive(req.user.id);
     if (!agent) return ok(res, { is_agent: false });
 
     const result = await Team.findTree(req.user.id, { page: pageNum, pageSize: pageSizeNum, depthFilter: depthNum });
-    await redis.set(cacheKeyPaged, JSON.stringify(result), 'EX', 300);
+    try {
+      await redis.set(cacheKeyPaged, JSON.stringify(result), 'EX', 300);
+    } catch (_) {}
     ok(res, result);
   } catch (err) {
     console.error(err);

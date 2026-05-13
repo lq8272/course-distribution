@@ -31,11 +31,16 @@ router.get('/stats', auth, async (req, res) => {
   try {
     const redis = getRedis();
     const cacheKey = REDIS_KEYS.COMMISSION_STATS(req.user.id);
-    const cached = await redis.get(cacheKey);
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKey);
+    } catch (_) {}
     if (cached) return ok(res, JSON.parse(cached));
 
     const stats = await Commission.stats(req.user.id);
-    await redis.set(cacheKey, JSON.stringify(stats), 'EX', 60);
+    try {
+      await redis.set(cacheKey, JSON.stringify(stats), 'EX', 60);
+    } catch (_) {}
     ok(res, stats);
   } catch (err) {
     console.error(err);

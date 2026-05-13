@@ -7,10 +7,12 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const videoService = require('../services/video');
 const db = require('../config/database');
+const { getConfig } = require('../config');
 
 // ==================== 上传凭证 ====================
 // POST /api/video/upload-token
@@ -121,9 +123,25 @@ router.get('/cdn-url/:key(*)', async (req, res) => {
 // ==================== 转码完成回调 ====================
 // POST /api/video/notify
 // 七牛云视频转码完成后回调此接口，更新课程视频地址
+// 鉴权：X-Qiniu-Signature = HMAC-SHA1(callbackSecret, rawBody)
 router.post('/notify', async (req, res) => {
   try {
-    const { pipeline, events, items } = req.body;
+    // 1. HMAC 签名验证（基于回调 body）
+    const callbackSecret = getConfig('qiniu.callbackSecret');
+    if (callbackSecret) {
+      const sig = req.get('X-Qiniu-Signature');
+      if (!sig) {
+        return res.status(401).json({ code: 40100, message: '缺少回调签名' });
+      }
+      const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const expected = crypto
+        .createHmac('sha1', callbackSecret)
+        .update(body, 'utf8')
+        .digest('hex');
+      if (sig !== expected) {
+        return res.status(403).json({ code: 40300, message: '回调签名验证失败' });
+      }
+    }
 
     // 验证是否是转码完成事件（兼容中英文事件名）
     // 七牛云事件名：TranscodeFinished / fop_done / workflow_finished

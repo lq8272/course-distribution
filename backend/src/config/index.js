@@ -78,6 +78,7 @@ module.exports = {
     bucketVideo: process.env.QINIU_BUCKET_VIDEO || '',
     publicDomain: process.env.QINIU_PUBLIC_DOMAIN || '',
     urlExpire: parseInt(process.env.QINIU_URL_EXPIRE || '3600'),
+    callbackSecret: process.env.QINIU_CALLBACK_SECRET || '',
   },
 
   platformRoot: {

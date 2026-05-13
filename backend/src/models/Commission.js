@@ -453,47 +453,61 @@ async function resolveAgentChain(conn, directAgentId, buyerId) {
   const result = { L1: null, L2: null, L3: null };
 
   // Fallback: if no directAgentId, start from buyer's teams parent
-  // conn.query returns [rows, fields]; rows = [{parent_id: N}]
   let startId = directAgentId;
   if (!startId && buyerId) {
-    const teamRows = await conn.query(
+    const [teamRows] = await conn.query(
       'SELECT parent_id FROM teams WHERE user_id = ? LIMIT 1',
       [buyerId]
     );
-    const firstRow = teamRows[0]?.[0];
-    if (firstRow?.parent_id != null) {
-      startId = firstRow.parent_id;
+    if (teamRows[0]?.parent_id != null) {
+      startId = teamRows[0].parent_id;
     }
   }
 
   if (!startId) return result;
 
-  const visited = new Set();
+  // 改为批量预加载：最多向上追溯 10 层，一次性加载所有 agents 和 teams
+  const agentIds = new Set();
+  const teamParentMap = {};
   let currentId = startId;
-  let depth = 0;
 
-  while (currentId && depth < 10 && !visited.has(currentId)) {
-    visited.add(currentId);
-    if (currentId !== buyerId) {
-      const [agentRows] = await conn.query(
-        'SELECT user_id, level FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
-        [currentId]
-      );
-      if (agentRows?.length) {
-        const info = { user_id: agentRows[0].user_id, level: agentRows[0].level };
-        if (!result.L1) result.L1 = info;
-        else if (!result.L2) result.L2 = info;
-        else if (!result.L3) { result.L3 = info; break; }
-      }
-    }
-
-    // 继续向上查 parent
+  // 迭代收集所有待查的 user_id（防环）
+  for (let depth = 0; depth < 10; depth++) {
+    if (!currentId) break;
+    agentIds.add(currentId);
     const [parentRows] = await conn.query(
       'SELECT parent_id FROM teams WHERE user_id = ? LIMIT 1',
       [currentId]
     );
-    if (!parentRows?.length || parentRows[0].parent_id == null) break;
+    if (!parentRows[0]?.parent_id) break;
+    teamParentMap[currentId] = parentRows[0].parent_id;
     currentId = parentRows[0].parent_id;
+  }
+
+  // 一次查询所有相关 agents
+  if (agentIds.size === 0) return result;
+  const [agentRows] = await conn.query(
+    `SELECT user_id, level FROM agents WHERE user_id IN (${[...agentIds].map(() => '?').join(',')}) AND status = 1`
+  );
+  const agentMap = {};
+  agentRows.forEach(a => { agentMap[a.user_id] = a; });
+
+  // 内存中重建 L1/L2/L3 链
+  currentId = startId;
+  const visited = new Set();
+  let depth = 0;
+  while (currentId && depth < 10 && !visited.has(currentId)) {
+    visited.add(currentId);
+    const a = agentMap[currentId];
+    if (a && currentId !== buyerId) {
+      const info = { user_id: a.user_id, level: a.level };
+      if (!result.L1) result.L1 = info;
+      else if (!result.L2) result.L2 = info;
+      else if (!result.L3) { result.L3 = info; break; }
+    }
+    const parentId = teamParentMap[currentId];
+    if (!parentId) break;
+    currentId = parentId;
     depth++;
   }
 

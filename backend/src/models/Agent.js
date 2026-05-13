@@ -163,12 +163,17 @@ const Agent = {
       conn.release();
 
       // 清除相关 Redis 缓存（审核通过后数据变更）
-      const redis = getRedis();
-      await redis.del(REDIS_KEYS.TEAM_OVERVIEW(agent.user_id));
-      await redis.del(REDIS_KEYS.TEAM_TREE(agent.user_id));
-      if (agent.recommender_id) {
-        await redis.del(REDIS_KEYS.TEAM_OVERVIEW(agent.recommender_id));
-        await redis.del(REDIS_KEYS.TEAM_TREE(agent.recommender_id));
+      // 事务已提交，此处失败不应影响已生效的审批结果
+      try {
+        const redis = getRedis();
+        await redis.del(REDIS_KEYS.TEAM_OVERVIEW(agent.user_id));
+        await redis.del(REDIS_KEYS.TEAM_TREE(agent.user_id));
+        if (agent.recommender_id) {
+          await redis.del(REDIS_KEYS.TEAM_OVERVIEW(agent.recommender_id));
+          await redis.del(REDIS_KEYS.TEAM_TREE(agent.recommender_id));
+        }
+      } catch (redisErr) {
+        console.warn('[approve] Redis缓存清理失败，不影响审批结果:', redisErr.message);
       }
 
       return agent;
