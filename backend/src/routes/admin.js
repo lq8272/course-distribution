@@ -10,6 +10,7 @@ const adminWithdrawRoutes = require('./admin/withdraw');
 const adminConfigRoutes = require('./admin/config');
 const adminStatsRoutes = require('./admin/stats');
 const adminPurchaseRoutes = require('./admin/purchase');
+const adminServiceRoutes = require('./admin/service');
 
 // 挂载子路由
 router.use('/auth', adminAuthRoutes);
@@ -20,5 +21,6 @@ router.use('/withdraw', adminWithdrawRoutes);
 router.use('/config', adminConfigRoutes);
 router.use('/stats', adminStatsRoutes);
 router.use('/purchase', adminPurchaseRoutes);
+router.use('/service', adminServiceRoutes);
 
 module.exports = router;

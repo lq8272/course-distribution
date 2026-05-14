@@ -22,7 +22,7 @@ async function run() {
   // Step 1: 管理员登录（POST /api/admin/login，用账号+密码）
   console.log('[1/10] 管理员登录');
   const loginRes = await apiRequest('POST', '/api/admin/login', {
-    username: 'test_admin_001',
+    username: 'admin_openid_001',
     password: 'admin123',
   });
   if (loginRes.status !== 200 || !loginRes.body?.data?.token) {

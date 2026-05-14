@@ -59,7 +59,7 @@ router.post('/login', async (req, res) => {
     }
     await getRedis().set(REDIS_KEYS.REFRESH_TOKEN(user.id), refreshToken, 'EX', 7 * 86400);
 
-    ok(res, { user: { id: user.id, nickname: user.nickname, openid: user.openid, is_admin: !!user.is_admin, is_agent: !!agent }, token, refreshToken });
+    ok(res, { user: { id: user.id, nickname: user.nickname, is_admin: !!user.is_admin, is_agent: !!agent }, token, refreshToken });
   } catch (err) {
     console.error('[auth/login]', err);
     return fail(res, 500, 50000, '登录失败');
@@ -167,7 +167,7 @@ router.get('/userinfo', require('../middleware/auth'), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return fail(res, 404, 40400, '用户不存在');
-    ok(res, { id: user.id, nickname: user.nickname, is_admin: !!user.is_admin, openid: user.openid });
+    ok(res, { id: user.id, nickname: user.nickname, is_admin: !!user.is_admin });
   } catch (err) {
     console.error(err);
     return fail(res, 500, 50000, '获取用户信息失败');
