@@ -83,7 +83,10 @@ const Order = {
     try {
       const [rows] = await conn.query('SELECT * FROM orders WHERE id = ? FOR UPDATE', [id]);
       if (!rows.length) { conn.rollback(); conn.release(); return null; }
-      if (rows[0].status !== 0) { conn.rollback(); conn.release(); return null; }
+      const order = rows[0];
+      if (order.status !== 0) { conn.rollback(); conn.release(); return null; }
+      // 归属校验：订单必须归属于真实用户
+      if (!order.user_id) { conn.rollback(); conn.release(); return null; }
       // 幂等：只处理 status=0 的订单
       await conn.execute(
         'UPDATE orders SET status = 1, confirm_time = NOW() WHERE id = ? AND status = 0',

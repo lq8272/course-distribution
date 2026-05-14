@@ -8,6 +8,12 @@ const adminAuth = require('../../middleware/admin'); // 管理员权限中间件
 const ok = (res, data) => res.json({ code: 0, data, message: '成功' });
 const fail = (res, httpCode, appCode, msg) => res.status(httpCode).json({ code: appCode, message: msg });
 
+// 手机号脱敏辅助函数
+function maskPhone(phone) {
+  if (!phone || typeof phone !== 'string') return null;
+  return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+}
+
 // GET /api/admin/service/conversations 全部会话列表（管理员）
 // GET /api/admin/service/conversations?status=0&type=consultation
 router.get('/conversations', auth, adminAuth, async (req, res) => {
@@ -31,7 +37,9 @@ router.get('/conversations', auth, adminAuth, async (req, res) => {
     }
     sql += ' ORDER BY cs.last_message_at DESC LIMIT 100';
     const rows = await db.query(sql, params);
-    ok(res, { rows, total: rows.length });
+    // 脱敏手机号
+    const masked = rows.map(r => ({ ...r, user_phone: maskPhone(r.user_phone) }));
+    ok(res, { rows: masked, total: masked.length });
   } catch (err) {
     return fail(res, 500, 50000, '查询失败');
   }
@@ -44,11 +52,13 @@ router.get('/conversations/:id', auth, adminAuth, async (req, res) => {
       `SELECT cs.*, u.nickname as user_nickname, u.phone as user_phone
        FROM customer_services cs
        LEFT JOIN users u ON u.id = cs.user_id
-       WHERE cs.id = ? LIMIT 1`,
+       WHERE cs.id = ? AND cs.user_id IS NOT NULL LIMIT 1`,
       [req.params.id]
     );
     if (!rows.length) return fail(res, 404, 40400, '会话不存在');
-    ok(res, rows[0]);
+    const conv = rows[0];
+    conv.user_phone = maskPhone(conv.user_phone);
+    ok(res, conv);
   } catch (err) {
     return fail(res, 500, 50000, '查询失败');
   }
@@ -57,6 +67,12 @@ router.get('/conversations/:id', auth, adminAuth, async (req, res) => {
 // GET /api/admin/service/messages/:conversationId 消息历史
 router.get('/messages/:conversationId', auth, adminAuth, async (req, res) => {
   try {
+    // 先校验会话存在且归属于真实用户
+    const convRows = await db.query(
+      `SELECT id FROM customer_services WHERE id = ? AND user_id IS NOT NULL LIMIT 1`,
+      [req.params.conversationId]
+    );
+    if (!convRows.length) return fail(res, 404, 40400, '会话不存在');
     const rows = await db.query(
       `SELECT m.*,
         CASE WHEN m.is_from_admin = 1 THEN a.nickname ELSE u.nickname END as sender_nickname,
@@ -76,7 +92,7 @@ router.get('/messages/:conversationId', auth, adminAuth, async (req, res) => {
       [req.params.conversationId]
     );
 
-    ok(res, { rows, total: rows.length });
+    ok(res, { rows: rows.map(r => ({ ...r, sender_phone: maskPhone(r.sender_phone) })), total: rows.length });
   } catch (err) {
     return fail(res, 500, 50000, '查询失败');
   }
@@ -136,6 +152,12 @@ router.put('/conversations/:id/status', auth, adminAuth, async (req, res) => {
     const { status } = req.body;
     if (status === undefined) return fail(res, 400, 40000, 'status不能为空');
     if (![0, 1, 2].includes(Number(status))) return fail(res, 400, 40000, 'status值非法');
+    // 校验会话存在且归属于真实用户
+    const convRows = await db.query(
+      `SELECT id FROM customer_services WHERE id = ? AND user_id IS NOT NULL LIMIT 1`,
+      [req.params.id]
+    );
+    if (!convRows.length) return fail(res, 404, 40400, '会话不存在');
     const result = await db.query(
       `UPDATE customer_services SET status = ?, updated_at = NOW() WHERE id = ?`,
       [Number(status), req.params.id]
