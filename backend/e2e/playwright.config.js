@@ -7,7 +7,7 @@ module.exports = defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: 'http://localhost:5173',
     headless: true,
     viewport: { width: 375, height: 812 },
     ignoreHTTPSErrors: true,

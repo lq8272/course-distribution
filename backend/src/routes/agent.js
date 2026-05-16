@@ -104,6 +104,58 @@ router.get('/levels', async (req, res) => {
   }
 });
 
+// GET /api/agent/center 分销中心首页
+router.get('/center', auth, async (req, res) => {
+  try {
+    const agent = await Agent.findByUserId(req.user.id);
+    if (!agent || agent.status !== 1) {
+      return ok(res, { is_agent: false });
+    }
+
+    // 推广码
+    const promoRecord = await PromotionCode.ensureForAgent(req.user.id, agent.level);
+    const promotion_code = promoRecord.code || null;
+
+    // 等级名称
+    const levelRows = await db.query(
+      'SELECT name FROM agent_levels WHERE level = ? LIMIT 1',
+      [agent.level]
+    );
+    const level_name = levelRows[0]?.name || String(agent.level);
+
+    // 佣金统计
+    const stats = await Commission.stats(req.user.id);
+
+    // 团队人数
+    const [directCount, allCount] = await Promise.all([
+      db.query('SELECT COUNT(*) as cnt FROM teams WHERE parent_id = ?', [req.user.id]),
+      db.query(
+        `SELECT COUNT(*) as cnt FROM teams WHERE root_id = ? AND user_id != ?`,
+        [req.user.id, req.user.id]
+      ),
+    ]);
+
+    ok(res, {
+      is_agent: true,
+      level: agent.level,
+      level_name,
+      promotion_code,
+      stats: {
+        total: stats.total,
+        available: stats.available,
+        withdrawn: stats.withdrawn,
+      },
+      team: {
+        direct_count: directCount[0]?.cnt || 0,
+        total_count: allCount[0]?.cnt || 0,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return fail(res, 500, 50000, '查询失败');
+  }
+});
+
 // GET /api/agent/team 我的团队（含各级人数）
 router.get('/team', auth, async (req, res) => {
   try {

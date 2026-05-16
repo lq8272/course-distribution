@@ -1,7 +1,8 @@
 // 统一请求封装
-// 开发者工具调试用 BASE_URL（微信开发者工具中 127.0.0.1 = Windows 宿主机）
-// 真机测试时需改成局域网 IP 或已备案域名
-const BASE_URL = 'http://127.0.0.1:3000/api';
+// 环境变量说明：
+//   .env           → VITE_API_BASE_URL=http://127.0.0.1:3000/api/v1  (本地开发)
+//   .env.production → VITE_API_BASE_URL=https://hhlfedu.com/api  (生产)
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
 
 function request(url, options = {}) {
   const token = uni.getStorageSync('token');

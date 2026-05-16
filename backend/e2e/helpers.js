@@ -72,7 +72,7 @@ export async function loginAsUser(page, code, nickname = null, promotionCode = n
  * @param {string} [password]
  */
 export async function loginAsAdmin(page, username = '13800138000', password = 'admin123') {
-  const res = await apiCall('/admin/login', { method: 'POST', body: { username, password } });
+  const res = await apiCall('/admin/auth/login', { method: 'POST', body: { username, password } });
   if (res.code !== 0 || !res.data?.token) {
     throw new Error(`loginAsAdmin failed: ${JSON.stringify(res)}`);
   }

@@ -10,20 +10,16 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {
-      "actualWorkers": 1
-    },
+    "metadata": {},
     "preserveOutput": "always",
     "projects": [
       {
         "outputDir": "/mnt/d/软件项目/Videos/course-distribute/backend/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
-        "id": "",
-        "name": "",
+        "metadata": {},
+        "id": "chromium",
+        "name": "chromium",
         "testDir": "/mnt/d/软件项目/Videos/course-distribute/backend/e2e",
         "testIgnore": [],
         "testMatch": [
@@ -42,6 +38,13 @@
         "json",
         {
           "outputFile": "e2e/results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report",
+          "open": "never"
         }
       ]
     ],
@@ -72,7 +75,7 @@
           "column": 6,
           "specs": [
             {
-              "title": "测试面板打开且显示测试用户列表",
+              "title": "登录页能正常加载，显示微信登录按钮和品牌区",
               "ok": true,
               "tags": [],
               "tests": [
@@ -80,33 +83,19 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 2797,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:40.290Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "d5ed79a6b333c2ba7209-3dfd0d5d8d5e65b85fd8",
+              "id": "d5ed79a6b333c2ba7209-8993493396dd381423cd",
               "file": "auth.spec.js",
               "line": 5,
               "column": 7
             },
             {
-              "title": "自定义 code 输入框可正常输入",
+              "title": "管理员登录入口可点击",
               "ok": true,
               "tags": [],
               "tests": [
@@ -114,33 +103,19 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 2665,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:43.207Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "d5ed79a6b333c2ba7209-0702fa4dbea28d475bd5",
+              "id": "d5ed79a6b333c2ba7209-0b1e2d2d818ad4249d0c",
               "file": "auth.spec.js",
-              "line": 18,
+              "line": 23,
               "column": 7
             },
             {
-              "title": "登录成功 → 跳转到首页（体验代理）",
+              "title": "协议复选框可切换状态",
               "ok": true,
               "tags": [],
               "tests": [
@@ -148,33 +123,19 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 5728,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:45.889Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "d5ed79a6b333c2ba7209-36e3a89352d5c914fe95",
+              "id": "d5ed79a6b333c2ba7209-a1f96e8616cc0369712b",
               "file": "auth.spec.js",
-              "line": 30,
+              "line": 36,
               "column": 7
             },
             {
-              "title": "游客先看看 → 跳转首页但未登录状态",
+              "title": "微信登录成功→跳转首页",
               "ok": true,
               "tags": [],
               "tests": [
@@ -182,29 +143,55 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 4147,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:51.630Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "d5ed79a6b333c2ba7209-e0b835f5717d7752afca",
+              "id": "d5ed79a6b333c2ba7209-7fd800b17113cbf4573b",
               "file": "auth.spec.js",
-              "line": 44,
+              "line": 55,
+              "column": 7
+            },
+            {
+              "title": "无协议勾选时无法点击登录",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d5ed79a6b333c2ba7209-c1a7be35d0b198ad5679",
+              "file": "auth.spec.js",
+              "line": 73,
+              "column": 7
+            },
+            {
+              "title": "管理员后台登录成功",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d5ed79a6b333c2ba7209-effa5d87b3d472e72e49",
+              "file": "auth.spec.js",
+              "line": 98,
               "column": 7
             }
           ]
@@ -221,7 +208,7 @@
         {
           "title": "课程模块",
           "file": "course.spec.js",
-          "line": 21,
+          "line": 22,
           "column": 6,
           "specs": [
             {
@@ -233,29 +220,15 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3122,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:55.799Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "19c33789440f4c643e8b-65348fbe3b80ddd8313a",
+              "id": "19c33789440f4c643e8b-a49d1be54ef54b578fc6",
               "file": "course.spec.js",
-              "line": 32,
+              "line": 33,
               "column": 7
             },
             {
@@ -267,29 +240,15 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3114,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:19:58.934Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "19c33789440f4c643e8b-200ba54d33051b79c53e",
+              "id": "19c33789440f4c643e8b-2be3480c4b6f056a79a0",
               "file": "course.spec.js",
-              "line": 39,
+              "line": 46,
               "column": 7
             },
             {
@@ -301,29 +260,15 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 5120,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:20:02.069Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "19c33789440f4c643e8b-ad2fac93e706b38d371f",
+              "id": "19c33789440f4c643e8b-41b1364449fbe8888c8d",
               "file": "course.spec.js",
-              "line": 48,
+              "line": 56,
               "column": 7
             },
             {
@@ -335,29 +280,75 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 4109,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:20:07.202Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "19c33789440f4c643e8b-888e2f79ba9701f6dde1",
+              "id": "19c33789440f4c643e8b-fadddeada95a9a4c508f",
               "file": "course.spec.js",
-              "line": 59,
+              "line": 71,
+              "column": 7
+            },
+            {
+              "title": "课程列表页可分页加载",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "19c33789440f4c643e8b-4619922863294cdb4b36",
+              "file": "course.spec.js",
+              "line": 87,
+              "column": 7
+            },
+            {
+              "title": "课程详情页显示课程章节/内容结构",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "19c33789440f4c643e8b-18615f4db237e4ee95a2",
+              "file": "course.spec.js",
+              "line": 96,
+              "column": 7
+            },
+            {
+              "title": "未登录用户可浏览课程列表（无需权限）",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "19c33789440f4c643e8b-577a7337bb20a06bef49",
+              "file": "course.spec.js",
+              "line": 115,
               "column": 7
             }
           ]
@@ -374,7 +365,7 @@
         {
           "title": "订单与佣金模块",
           "file": "order.spec.js",
-          "line": 21,
+          "line": 42,
           "column": 6,
           "specs": [
             {
@@ -386,33 +377,19 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3111,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:20:11.333Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "11ab1a6f865decef84f6-e0c7af850e7f4b41f0be",
+              "id": "11ab1a6f865decef84f6-94e074347079641d5abb",
               "file": "order.spec.js",
-              "line": 32,
+              "line": 53,
               "column": 7
             },
             {
-              "title": "我的钱包页可正常打开，显示佣金信息",
+              "title": "我的钱包页可正常打开，显示余额信息",
               "ok": true,
               "tags": [],
               "tests": [
@@ -420,29 +397,99 @@
                   "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "",
-                  "projectName": "",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3106,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-05-06T13:20:14.456Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
                 }
               ],
-              "id": "11ab1a6f865decef84f6-e3765426bfcddffe6972",
+              "id": "11ab1a6f865decef84f6-81cf3b16c7fd5c3dd18c",
               "file": "order.spec.js",
-              "line": 41,
+              "line": 62,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "完整购课→佣金结算→提现全流程",
+          "file": "order.spec.js",
+          "line": 74,
+          "column": 6,
+          "specs": [
+            {
+              "title": "完整购课→佣金结算→提现全流程",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "11ab1a6f865decef84f6-a6cccff2c14ee9520ec9",
+              "file": "order.spec.js",
+              "line": 75,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "推广码下单→佣金归属正确",
+          "file": "order.spec.js",
+          "line": 158,
+          "column": 6,
+          "specs": [
+            {
+              "title": "推广码下单→佣金归属正确",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "11ab1a6f865decef84f6-14fdcd2e0adcb88c24aa",
+              "file": "order.spec.js",
+              "line": 159,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "订单基础功能",
+          "file": "order.spec.js",
+          "line": 209,
+          "column": 6,
+          "specs": [
+            {
+              "title": "用户登出后无法访问订单列表",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "11ab1a6f865decef84f6-45ac834f3a79f6308694",
+              "file": "order.spec.js",
+              "line": 210,
               "column": 7
             }
           ]
@@ -452,10 +499,10 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-05-06T13:19:28.596Z",
-    "duration": 49033.234,
-    "expected": 10,
-    "skipped": 0,
+    "startTime": "2026-05-16T02:26:45.731Z",
+    "duration": 174.0650000000005,
+    "expected": 0,
+    "skipped": 18,
     "unexpected": 0,
     "flaky": 0
   }

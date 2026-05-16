@@ -78,7 +78,10 @@ async function handleLogin() {
       // 管理员登录后存管理员专属 token（同时存到 token 供 API 拦截器使用）
       userStore.setAuth(res.user, res.token, null);
       uni.setStorageSync('token', res.token);
-      uni.redirectTo({ url: '/pages/admin/index' });
+      // 等待 store 状态更新后再跳转，避免 isAdmin 判断在 onShow 时尚未就绪
+      setTimeout(() => {
+        uni.redirectTo({ url: '/pages/admin/index' });
+      }, 50);
     } else {
       uni.showToast({ title: '登录失败', icon: 'none' });
     }

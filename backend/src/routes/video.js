@@ -14,6 +14,30 @@ const videoService = require('../services/video');
 const db = require('../config/database');
 const { getConfig } = require('../config');
 
+// GET /api/video/list 视频列表（返回有视频的课程）
+router.get('/list', auth, async (req, res) => {
+  try {
+    const { page = 1, page_size = 20 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(page_size);
+    const rows = await db.query(
+      `SELECT id, title, cover_image, video_key, video_url, price, is_free
+       FROM courses
+       WHERE (video_key IS NOT NULL AND video_key != '') OR (video_url IS NOT NULL AND video_url != '')
+       ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [parseInt(page_size), offset]
+    );
+    const total = await db.query(
+      `SELECT COUNT(*) as cnt FROM courses
+       WHERE (video_key IS NOT NULL AND video_key != '') OR (video_url IS NOT NULL AND video_url != '')`
+    );
+    const totalCnt = Array.isArray(total) ? (total[0]?.cnt ?? 0) : (total?.cnt ?? 0);
+    return res.json({ code: 0, data: { rows, total: totalCnt }, message: '成功' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ code: 50000, message: '查询失败' });
+  }
+});
+
 // ==================== 上传凭证 ====================
 // POST /api/video/upload-token
 // Body: { course_id, filename }

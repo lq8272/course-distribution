@@ -20,6 +20,8 @@
     { "path": "pages/service/chat", "style": { "navigationBarTitleText": "客服聊天" } },
     { "path": "pages/user/settings", "style": { "navigationBarTitleText": "设置" } },
     { "path": "pages/agent/apply/index", "style": { "navigationBarTitleText": "申请成为分销商" } },
+    { "path": "pages/agent/purchase/index", "style": { "navigationBarTitleText": "代理拿货" } },
+    { "path": "pages/agent/upgrade/index", "style": { "navigationBarTitleText": "代理升级" } },
     { "path": "pages/user/wallet", "style": { "navigationBarTitleText": "我的钱包" } },
     { "path": "pages/user/address", "style": { "navigationBarTitleText": "收货地址" } },
     { "path": "pages/user/coupon", "style": { "navigationBarTitleText": "优惠券" } },

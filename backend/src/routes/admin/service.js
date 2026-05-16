@@ -14,6 +14,36 @@ function maskPhone(phone) {
   return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
 }
 
+// GET /api/admin/service/list — 会话列表（别名，同 /conversations）
+router.get('/list', auth, adminAuth, async (req, res) => {
+  try {
+    const { status, type } = req.query;
+    let sql = `SELECT cs.*,
+        u.nickname as user_nickname, u.phone as user_phone,
+        (SELECT content FROM customer_messages WHERE conversation_id = cs.id ORDER BY id DESC LIMIT 1) as last_content,
+        (SELECT COUNT(*) FROM customer_messages WHERE conversation_id = cs.id AND is_read = 0 AND is_from_admin = 0) as unread_user
+       FROM customer_services cs
+       LEFT JOIN users u ON u.id = cs.user_id
+       WHERE 1=1`;
+    const params = [];
+    if (status !== undefined) {
+      sql += ' AND cs.status = ?';
+      params.push(status);
+    }
+    if (type) {
+      sql += ' AND cs.type = ?';
+      params.push(type);
+    }
+    sql += ' ORDER BY cs.id DESC';
+
+    const rows = await db.query(sql, params);
+    return res.json({ code: 0, data: { rows }, message: '成功' });
+  } catch (err) {
+    console.error('[admin/service/list]', err);
+    return res.status(500).json({ code: 50000, message: '查询失败' });
+  }
+});
+
 // GET /api/admin/service/conversations 全部会话列表（管理员）
 // GET /api/admin/service/conversations?status=0&type=consultation
 router.get('/conversations', auth, adminAuth, async (req, res) => {

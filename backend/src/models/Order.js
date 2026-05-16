@@ -19,11 +19,16 @@ const Order = {
     const totalAmount = parseFloat(price) || 0;
     // 免费课程创建即确认（status=1），付费课程待管理员确认（status=0）
     const orderStatus = is_free === 1 ? 1 : 0;
+    console.log(`[Order.create] userId=${userId}, courseId=${courseId}, directAgentId=${directAgentId}, agentId=${agentId}, orderStatus=${orderStatus}`);
+    const finalDirectAgentId = directAgentId != null ? String(directAgentId) : null;
+    const finalAgentId = agentId != null ? String(agentId) : null;
+    console.log(`[Order.create] final values: direct_agent_id=${finalDirectAgentId}, agent_id=${finalAgentId}`);
     const r = await db.execute(
       `INSERT INTO orders (user_id, course_id, agent_id, promotion_code_id, type, status, direct_agent_id, total_amount, confirm_time, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${orderStatus === 1 ? 'NOW()' : 'NULL'}, NOW())`,
-      [userId, courseId, agentId || null, promotionCodeId || null, type, orderStatus, directAgentId || null, totalAmount]
+      [userId, courseId, finalAgentId, promotionCodeId || null, type, orderStatus, finalDirectAgentId, totalAmount]
     );
+    console.log(`[Order.create] inserted order id=${r.insertId}, direct_agent_id=${finalDirectAgentId}`);
     // 免费课程创建即结算佣金（事务保证）
     if (orderStatus === 1) {
       const conn = await db.getConnection();

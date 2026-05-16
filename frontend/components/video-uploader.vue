@@ -190,7 +190,7 @@ function doQiniuUpload(file, token, key) {
     // 使用微信的 chooseMessageFile 已经选好了文件
     // 这里直接用 fetch PUT 到七牛上传地址
     // 七牛上传域名（华北 z1）
-    const uploadHost = 'https://up-z1.qiniup.com';
+    const uploadHost = 'http://up-z2.qiniu.com:80';
 
     uni.uploadFile({
       url: uploadHost,

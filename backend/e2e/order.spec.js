@@ -27,7 +27,7 @@ async function getToken(code) {
  * 获取管理员 token（Node.js 端）
  */
 async function getAdminToken() {
-  const res = await fetch(`${API}/admin/login?__test_bypass=1`, {
+  const res = await fetch(`${API}/admin/auth/login?__test_bypass=1`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: '13800138000', password: 'admin123' }),

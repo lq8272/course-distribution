@@ -9,7 +9,7 @@ const fail = (res, httpCode, appCode, msg) => res.status(httpCode).json({ code: 
 // GET /api/admin/category/list
 router.get('/list', auth, adminAuth, async (req, res) => {
   try {
-    const rows = await db.query('SELECT * FROM course_categories ORDER BY sort ASC, id ASC');
+    const rows = await db.query('SELECT * FROM course_category ORDER BY sort ASC, id ASC');
     ok(res, rows);
   } catch (err) {
     console.error(err);
@@ -23,7 +23,7 @@ router.post('/', auth, adminAuth, async (req, res) => {
     const { name, parent_id, sort = 0, is_show = 1 } = req.body;
     if (!name) return fail(res, 400, 40000, 'name不能为空');
     const r = await db.execute(
-      'INSERT INTO course_categories (name, parent_id, sort, is_show) VALUES (?, ?, ?, ?)',
+      'INSERT INTO course_category (name, parent_id, sort, is_show) VALUES (?, ?, ?, ?)',
       [name.trim(), parent_id || null, parseInt(sort), parseInt(is_show)]
     );
     ok(res, { id: r.insertId });
@@ -44,7 +44,7 @@ router.put('/:id', auth, adminAuth, async (req, res) => {
     if (is_show !== undefined) { fields.push('is_show = ?'); params.push(parseInt(is_show)); }
     if (!fields.length) return fail(res, 400, 40000, '无更新字段');
     params.push(parseInt(req.params.id));
-    await db.execute(`UPDATE course_categories SET ${fields.join(', ')} WHERE id = ?`, params);
+    await db.execute(`UPDATE course_category SET ${fields.join(', ')} WHERE id = ?`, params);
     ok(res, null);
   } catch (err) {
     console.error(err);
@@ -61,14 +61,14 @@ router.delete('/:id', auth, adminAuth, async (req, res) => {
     try {
       // 检查是否有子分类（在事务内加锁，防止 TOCTOU 竞态）
       const [children] = await conn.query(
-        'SELECT id FROM course_categories WHERE parent_id = ? LIMIT 1 FOR UPDATE',
+        'SELECT id FROM course_category WHERE parent_id = ? LIMIT 1 FOR UPDATE',
         [id]
       );
       if (children.length) {
         await conn.rollback(); conn.release();
         return fail(res, 400, 40000, '该分类下存在子分类，请先删除子分类');
       }
-      await conn.execute('DELETE FROM course_categories WHERE id = ?', [id]);
+      await conn.execute('DELETE FROM course_category WHERE id = ?', [id]);
       await conn.commit();
       conn.release();
       ok(res, null);

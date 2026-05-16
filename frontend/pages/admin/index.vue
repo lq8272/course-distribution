@@ -532,7 +532,7 @@ onShow(async () => {
     toast({ title: '请先登录', icon: 'none' });
     return;
   }
-  if (!userStore.isAdmin.value) {
+  if (!userStore.isAdmin) {
     toast({ title: '需要管理员权限', icon: 'none' });
     return;
   }
@@ -770,7 +770,7 @@ async function pickCover() {
       // 2. 七牛直传
       const uploadRes = await new Promise((resolve, reject) => {
         uni.uploadFile({
-          url: 'https://up-z1.qiniup.com',
+          url: 'http://up-z2.qiniu.com:80',
           filePath: file.path,
           fileType: 'image',
           name: 'file',

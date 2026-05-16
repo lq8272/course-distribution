@@ -34,9 +34,9 @@ router.post('/create', auth, async (req, res) => {
       );
       console.log(`[OrderCreate] promotion_code=${promotion_code}, codeRows=`, JSON.stringify(rows));
       if (rows.length && rows[0].user_id != null) {
-        directAgentId = rows[0].user_id;
+        directAgentId = rows[0].agent_id; // agents.id，resolveAgentChain 需要的直接代理记录 ID
         agentDbId = rows[0].agent_id || null;
-        console.log(`[OrderCreate] directAgentId=${directAgentId}`);
+        console.log(`[OrderCreate] directAgentId=${directAgentId} (agent row id)`);
         // 更新推广码访问计数（允许少量计数丢失，不加行锁避免高并发阻塞）
         await db.query(
           'UPDATE promotion_codes SET visit_count = visit_count + 1 WHERE code = ?',
@@ -52,6 +52,7 @@ router.post('/create', auth, async (req, res) => {
       promotionCodeId: null,
       directAgentId,
     });
+    console.log(`[OrderCreate API] orderId=${orderId}, directAgentId=${directAgentId}, agentDbId=${agentDbId}`);
     ok(res, { order_id: orderId });
   } catch (err) {
     console.error(err);
@@ -144,6 +145,25 @@ router.post('/:id/refund', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return fail(res, 500, 50000, '退款失败');
+  }
+});
+
+// POST /api/order/:id/pay 模拟支付（mock WeChat pay callback）
+router.post('/:id/pay', auth, async (req, res) => {
+  try {
+    const order = await Order.findById(parseInt(req.params.id));
+    if (!order) return fail(res, 404, 40400, '订单不存在');
+    if (order.user_id !== req.user.id && !req.user.is_admin) return fail(res, 403, 40300, '无权限');
+    if (order.status !== 0) return fail(res, 400, 40000, '订单状态不可支付');
+
+    // 调用 Order.confirm() 会更新 status=1 并结算佣金
+    const updated = await Order.confirm(parseInt(req.params.id));
+    if (!updated) return fail(res, 400, 40000, '支付失败');
+
+    ok(res, { status: 1 });
+  } catch (err) {
+    console.error(err);
+    return fail(res, 500, 50000, '支付失败');
   }
 });
 

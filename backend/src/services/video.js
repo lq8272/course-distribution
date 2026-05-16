@@ -24,9 +24,9 @@ const SECRET_KEY = process.env.QINIU_SECRET_KEY || '';
 // 存储空间名（图片和视频分开）
 const BUCKET_IMAGE = process.env.QINIU_BUCKET_IMAGE || '';
 const BUCKET_VIDEO = process.env.QINIU_BUCKET_VIDEO || '';
-// 公开域名前缀（转码完成后的播放地址）
+// 公开域名前缀（图片 bucket 的 CDN 域名）
 const PUBLIC_DOMAIN = process.env.QINIU_PUBLIC_DOMAIN || '';
-// 视频 bucket 域名（私有 bucket 签名用）
+// 视频 bucket 域名（私有 bucket 签名用，用于视频播放）
 const VIDEO_DOMAIN = process.env.QINIU_VIDEO_DOMAIN || PUBLIC_DOMAIN;
 // 私有bucket签名URL有效期（秒），默认1小时
 const SIGNED_URL_EXPIRE = parseInt(process.env.QINIU_URL_EXPIRE || '3600');
@@ -67,7 +67,7 @@ function createImageUploadToken(key) {
   };
 }
 
-// ==================== 上传凭证（图片）=================
+// ==================== 上传凭证（视频）=================
 /**
  * 生成视频上传凭证
  * 前端凭此凭证直传文件到七牛（不经过后端）
@@ -148,13 +148,15 @@ function createSignedUrlSync(key, expires = SIGNED_URL_EXPIRE) {
  * 替换 m3u8 中所有 .ts 分片路径为完整签名 URL
  *
  * @param {string} hlsContent - 原始 m3u8 文件内容文本
- * @param {number} expires - 签名有效期（秒）
+ * @param {number} expires - 签名有效期（秒），默认3600
  * @returns {string} 签名后的 m3u8 内容
  */
 function signHlsContent(hlsContent, expires = SIGNED_URL_EXPIRE) {
   if (!isConfigured()) return hlsContent;
   const deadline = Math.floor(Date.now() / 1000) + expires;
-  const domain = PUBLIC_DOMAIN.startsWith('http') ? PUBLIC_DOMAIN : 'https://' + PUBLIC_DOMAIN;
+  // HLS 分片统一使用视频域名
+  const domainRaw = VIDEO_DOMAIN;
+  const domain = domainRaw.startsWith('http') ? domainRaw : 'https://' + domainRaw;
 
   // 匹配所有 .ts 分片路径（支持不同目录层级）
   return hlsContent.replace(/^(.+?\.(?:ts|key))(.*)$/gm, (match, tsPath, querySuffix) => {
@@ -179,7 +181,9 @@ async function getSignedHlsPlaylist(m3u8Key) {
   if (!isConfigured()) {
     throw new Error('七牛云未配置');
   }
-  const domain = PUBLIC_DOMAIN.startsWith('http') ? PUBLIC_DOMAIN : 'https://' + PUBLIC_DOMAIN;
+  // 拉取原始 m3u8 使用视频域名
+  const domainRaw = VIDEO_DOMAIN;
+  const domain = domainRaw.startsWith('http') ? domainRaw : 'https://' + domainRaw;
   const m3u8Url = domain + '/' + m3u8Key;
 
   // 拉取原始 m3u8 内容

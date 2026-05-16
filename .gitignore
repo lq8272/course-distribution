@@ -36,3 +36,7 @@ unpackage/
 
 # Test coverage
 coverage/
+
+# Playwright test results
+backend/test-results/
+backend/e2e/playwright-report/
