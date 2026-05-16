@@ -12,7 +12,7 @@
  *   uni.$on('ws_notification',    (data) => { ... });    // 系统通知
  */
 
-const WS_URL = 'ws://127.0.0.1:3000/ws';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://127.0.0.1:3000/ws';
 
 // 心跳间隔 25s，超时 60s 判定断开
 const HEARTBEAT_INTERVAL = 25000;
