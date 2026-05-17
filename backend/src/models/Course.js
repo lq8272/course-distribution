@@ -108,7 +108,7 @@ const Course = {
   },
 
   async categories() {
-    return db.query('SELECT * FROM course_category WHERE is_show = 1 ORDER BY sort ASC, id ASC');
+    return db.query('SELECT * FROM course_categories WHERE is_show = 1 ORDER BY sort ASC, id ASC');
   },
 
   async create(data) {
