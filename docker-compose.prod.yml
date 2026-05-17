@@ -57,9 +57,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      # SSL 证书（放入 ./docker/nginx/ssl/ 目录后取消注释）
-      # - ./docker/nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-      # - ./docker/nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      # SSL 证书
+      - ./docker/nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - ./docker/nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
       # 前端构建产物（H5 webview 版，deploy.sh 构建后才有内容）
