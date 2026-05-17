@@ -69,7 +69,7 @@ async function handleLogin() {
 
   loading.value = true;
   try {
-    const res = await api.post('/admin/login', {
+    const res = await api.post('/admin/auth/login', {
       username: form.value.username,
       password: form.value.password,
     });
