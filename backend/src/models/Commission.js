@@ -17,8 +17,8 @@ db.query('SELECT `key`, value FROM configs WHERE `key` IN (?,?,?,?,?,?,?,?,?)', 
       }
     });
   })
-  .catch(() => {
-    // 数据库未就绪时跳过（启动阶段数据库可能未准备好）
+  .catch((e) => {
+    console.warn(`[Commission] 推荐奖励配置加载失败（数据库可能未就绪）: ${e.message}，将按 0 处理`);
   });
 
 const Commission = {
@@ -66,14 +66,20 @@ const Commission = {
       }
 
       // 3. 向上追溯 L1/L2/L3 有效分销商（含各自等级）
-      const agentsChain = await resolveAgentChain(conn, o.direct_agent_id, o.user_id);
+      let agentsChain;
+      try {
+        agentsChain = await resolveAgentChain(conn, o.direct_agent_id, o.user_id);
+      } catch(e) {
+        console.error('[Commission settleForOrder] resolveAgentChain ERROR:', e.message);
+        throw e;
+      }
 
       // 4. 读取各级分销商的 rebate_rate（从 agent_levels 表动态获取）
       const levelRates = { DR: 0, MXJ: 0, CJHH: 0 };
       const [rateRows] = await conn.query(
         "SELECT level, rebate_rate FROM agent_levels WHERE level IN ('DR','DISTRIBUTORDR','MXJ','DISTRIBUTORMXJ','CJHH','DISTRIBUTORCJHH')"
       );
-      rateRows.forEach(r => { levelRates[r.level] = parseFloat(r.rebate_rate) || 0; });
+      rateRows.forEach(r => { levelRates[r.level.toUpperCase()] = parseFloat(r.rebate_rate) || 0; });
 
       const settlements = [];
 
@@ -82,7 +88,7 @@ const Commission = {
       //    L2 梦想家：拿 (L2_rate - L1_rate) × 课程价格，仅当差值为正
       //    L3 超合伙：拿 (L3_rate - L2_rate) × 课程价格，仅当差值为正
       if (agentsChain.L1) {
-        const rate1 = levelRates[agentsChain.L1.level] ?? 0;
+        const rate1 = levelRates[agentsChain.L1.level.toUpperCase()] ?? 0;
         const amount = Math.round(price * rate1 * 100) / 100;
         if (amount > 0) {
           await conn.execute(
@@ -95,8 +101,8 @@ const Commission = {
       }
 
       if (agentsChain.L2) {
-        const rate2 = levelRates[agentsChain.L2.level] ?? 0;
-        const rate1 = levelRates[agentsChain.L1?.level] ?? 0;
+        const rate2 = levelRates[agentsChain.L2.level.toUpperCase()] ?? 0;
+        const rate1 = levelRates[agentsChain.L1?.level.toUpperCase()] ?? 0;
         const diffRate = Math.max(0, rate2 - rate1);
         const amount = Math.round(price * diffRate * 100) / 100;
         if (amount > 0) {
@@ -110,8 +116,8 @@ const Commission = {
       }
 
       if (agentsChain.L3) {
-        const rate3 = levelRates[agentsChain.L3.level] ?? 0;
-        const rate2 = levelRates[agentsChain.L2?.level] ?? 0;
+        const rate3 = levelRates[agentsChain.L3.level.toUpperCase()] ?? 0;
+        const rate2 = levelRates[agentsChain.L2?.level.toUpperCase()] ?? 0;
         const diffRate = Math.max(0, rate3 - rate2);
         const amount = Math.round(price * diffRate * 100) / 100;
         if (amount > 0) {
@@ -172,6 +178,7 @@ const Commission = {
    * 订单退款/取消时撤销佣金（status=1→3）
    * @param {number} orderId - 订单 ID
    * @param {object} [existingConn] - 可选外部连接（复用事务）
+   * @returns {Promise<{revoked: number, withdrawn: number}>} revoked=已撤销笔数，withdrawn=已提现笔数（含已提现的佣金不可退款）
    */
   async revokeForOrder(orderId, existingConn = null) {
     const shouldRelease = existingConn === null;
@@ -179,17 +186,32 @@ const Commission = {
     const conn = existingConn || await db.getConnection();
     if (!existingConn) await conn.beginTransaction();
     try {
+      // 查出所有佣金记录（status=1 可撤销，status=2 已提现不可撤销）
       const [rows] = await conn.query(
-        'SELECT id, amount FROM commissions WHERE order_id = ? AND status = 1 FOR UPDATE',
+        'SELECT id, amount, status FROM commissions WHERE order_id = ?',
         [orderId]
       );
-      if (rows.length) {
-        const ids = rows.map(r => r.id);
+      const pending = rows.filter(r => r.status === 1);
+      const withdrawn = rows.filter(r => r.status === 2);
+
+      if (withdrawn.length > 0) {
+        // 有已提现佣金：订单不可退款（需先撤回提现申请）
+        console.warn(`[Commission revokeForOrder] 订单#${orderId} 有 ${withdrawn.length} 笔已提现佣金，拒绝退款`);
+        if (!existingConn) { await conn.rollback(); conn.release(); }
+        throw new Error('ORDER_HAS_WITHDRAWN_COMMISSIONS');
+      }
+
+      if (pending.length === 0) {
+        // 无可撤销的佣金（可能已退款或从未结算），记录日志
+        console.warn(`[Commission revokeForOrder] 订单#${orderId} 无可撤销的佣金记录`);
+      } else {
+        const ids = pending.map(r => r.id);
         await conn.execute(
           `UPDATE commissions SET status = 3 WHERE id IN (${ids.map(() => '?').join(',')})`,
           ids
         );
       }
+
       // 清除订单佣金结算标记（允许重新结算若订单重新确认）
       await conn.execute(
         'UPDATE orders SET commission_settled = 0 WHERE id = ?',
@@ -197,8 +219,9 @@ const Commission = {
       );
       if (shouldCommit) await conn.commit();
       if (shouldRelease) conn.release();
+      return { revoked: pending.length, withdrawn: 0 };
     } catch (e) {
-      if (shouldCommit) await conn.rollback();
+      await conn.rollback();  // 无条件回滚，fail-safe
       if (shouldRelease) conn.release();
       throw e;
     }
@@ -454,62 +477,82 @@ function buildAgentChain(agentMap, startId) {
 async function resolveAgentChain(conn, directAgentId, buyerId) {
   const result = { L1: null, L2: null, L3: null };
 
+  // directAgentId 是 agents.id，需要先找到对应的 user_id，再用 user_id 查 teams 表
+  let startUserId = null;
+  if (directAgentId) {
+    const [directRows] = await conn.query(
+      'SELECT user_id FROM agents WHERE id = ? AND status = 1 LIMIT 1',
+      [directAgentId]
+    );
+    if (directRows[0]) {
+      startUserId = directRows[0].user_id;
+    }
+  }
+
   // Fallback: if no directAgentId, start from buyer's teams parent
-  let startId = directAgentId;
-  if (!startId && buyerId) {
+  if (!startUserId && buyerId) {
     const [teamRows] = await conn.query(
       'SELECT parent_id FROM teams WHERE user_id = ? LIMIT 1',
       [buyerId]
     );
     if (teamRows[0]?.parent_id != null) {
-      startId = teamRows[0].parent_id;
+      startUserId = teamRows[0].parent_id;
     }
   }
 
-  if (!startId) return result;
+  if (!startUserId) return result;
 
-  // 改为批量预加载：最多向上追溯 10 层，一次性加载所有 agents 和 teams
-  const agentIds = new Set();
-  const teamParentMap = {};
-  let currentId = startId;
+  // 追溯 teams 链，收集所有 user_id
+  const userIds = new Set();
+  const teamParentMap = {}; // user_id -> parent_user_id
+  let currentUserId = startUserId;
 
-  // 迭代收集所有待查的 user_id（防环）
   for (let depth = 0; depth < 10; depth++) {
-    if (!currentId) break;
-    agentIds.add(currentId);
+    if (!currentUserId) break;
+    userIds.add(currentUserId);
     const [parentRows] = await conn.query(
       'SELECT parent_id FROM teams WHERE user_id = ? LIMIT 1',
-      [currentId]
+      [currentUserId]
     );
     if (!parentRows[0]?.parent_id) break;
-    teamParentMap[currentId] = parentRows[0].parent_id;
-    currentId = parentRows[0].parent_id;
+    teamParentMap[currentUserId] = parentRows[0].parent_id;
+    currentUserId = parentRows[0].parent_id;
   }
 
-  // 一次查询所有相关 agents
-  if (agentIds.size === 0) return result;
-  const [agentRows] = await conn.query(
-    `SELECT user_id, level FROM agents WHERE user_id IN (${[...agentIds].map(() => '?').join(',')}) AND status = 1`
-  );
-  const agentMap = {};
-  agentRows.forEach(a => { agentMap[a.user_id] = a; });
+  if (userIds.size === 0) return result;
 
-  // 内存中重建 L1/L2/L3 链
-  currentId = startId;
+  // 一次查询所有相关的 agents（通过 user_id 集合）
+  // mysql2 query() 不自动展开数组，需要用 apply 将数组元素作为独立参数传入
+  const idsArray = [...userIds];
+  const placeholders = idsArray.map(() => '?').join(',');
+  const sql = `SELECT id, user_id, level FROM agents WHERE user_id IN (${placeholders}) AND status = 1`;
+  let [agentRows] = await conn.query(sql, idsArray);
+  if (agentRows.length === 0) {
+    // fallback: 直接用 startUserId 查
+    const [direct] = await conn.query('SELECT id, user_id, level FROM agents WHERE user_id = ? AND status = 1', [startUserId]);
+    if (direct.length > 0) agentRows = direct;
+  }
+
+  // 建立 user_id -> agent 记录的映射
+  const userIdToAgent = {};
+  agentRows.forEach(a => { userIdToAgent[a.user_id] = a; });
+
+  // 内存中按 teams 链顺序重建 L1/L2/L3
+  currentUserId = startUserId;
   const visited = new Set();
   let depth = 0;
-  while (currentId && depth < 10 && !visited.has(currentId)) {
-    visited.add(currentId);
-    const a = agentMap[currentId];
-    if (a && currentId !== buyerId) {
+  while (currentUserId && depth < 10 && !visited.has(currentUserId)) {
+    visited.add(currentUserId);
+    const a = userIdToAgent[currentUserId];
+    if (a && currentUserId !== buyerId) {
       const info = { user_id: a.user_id, level: a.level };
       if (!result.L1) result.L1 = info;
       else if (!result.L2) result.L2 = info;
       else if (!result.L3) { result.L3 = info; break; }
     }
-    const parentId = teamParentMap[currentId];
-    if (!parentId) break;
-    currentId = parentId;
+    const parentUserId = teamParentMap[currentUserId];
+    if (!parentUserId) break;
+    currentUserId = parentUserId;
     depth++;
   }
 

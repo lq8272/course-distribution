@@ -30,7 +30,8 @@ const Agent = {
     const offset = (page - 1) * pageSize;
     const [rows, total] = await Promise.all([
       db.query(
-        `SELECT a.*, u.nickname, u.openid
+        `SELECT a.id, a.user_id, a.level, a.gift_quantity, a.recommender_id, a.status, a.created_at,
+                u.nickname
          FROM agents a
          LEFT JOIN users u ON u.id = a.user_id
          WHERE a.status = 0
@@ -198,8 +199,8 @@ const Agent = {
     const offset = (page - 1) * pageSize;
     const [rows, total] = await Promise.all([
       db.query(
-        `SELECT u.id, u.nickname, u.openid,
-                au.from_level, au.to_level, au.apply_fee, au.remark, au.created_at,
+        `SELECT au.id, au.user_id, au.from_level, au.to_level, au.apply_fee, au.remark, au.created_at,
+                u.nickname,
                 a.referral_count
          FROM agent_upgrades au
          LEFT JOIN users u ON u.id = au.user_id

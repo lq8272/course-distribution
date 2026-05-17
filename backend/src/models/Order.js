@@ -149,6 +149,10 @@ const Order = {
       conn.release();
       return rows[0];
     } catch (e) {
+      if (e.message === 'ORDER_HAS_WITHDRAWN_COMMISSIONS') {
+        await conn.rollback(); conn.release();
+        throw new Error('该订单有已提现的佣金，请先撤回提现申请后再退款');
+      }
       await conn.rollback(); conn.release();
       throw e;
     }
