@@ -254,6 +254,47 @@ function generateVideoKey(courseId, originalFilename) {
   return `videos/course_${courseId}_${Date.now()}.${ext}`;
 }
 
+// ==================== PFOP 持久化转码触发 ====================
+/**
+ * 触发七牛 PFOP 视频转码（MP4 → HLS）
+ * 转码完成后七牛回调 /api/video/notify
+ *
+ * @param {number} courseId - 课程ID
+ * @param {string} mp4Key - 原始MP4的七牛存储key
+ * @param {string} callbackUrl - 转码完成回调地址，如 https://api.hhlfedu.com/api/video/notify
+ * @returns {Promise<{persistentId: string}>}
+ */
+async function triggerPfop(courseId, mp4Key, callbackUrl) {
+  if (!isConfigured()) {
+    throw new Error('七牛云未配置');
+  }
+  const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+  const config = new qiniu.conf.Config();
+  config.zone = getZone();
+  const oper = new qiniu.fop.OperationManager(mac, config);
+
+  return new Promise((resolve, reject) => {
+    oper.pfop(
+      BUCKET_VIDEO,    // bucket
+      mp4Key,          // key（原始MP4）
+      ['avthumb/m3u8/segtime/10'],  // 转HLS，10秒切片
+      null,            // pipeline（null=默认公共队列）
+      { notifyURL: callbackUrl },
+      (err, respBody, respInfo) => {
+        if (err) {
+          console.error('[triggerPfop] err:', err);
+          return reject(err);
+        }
+        if (respInfo.statusCode !== 200) {
+          return reject(new Error(`PFOP请求失败: ${respInfo.statusCode} ${JSON.stringify(respBody)}`));
+        }
+        console.log(`[triggerPfop] 课程${courseId} 提交转码 persistentId=${respBody.persistentId}`);
+        resolve({ persistentId: respBody.persistentId });
+      }
+    );
+  });
+}
+
 module.exports = {
   isConfigured,
   createUploadToken,
@@ -264,6 +305,7 @@ module.exports = {
   getSignedHlsPlaylist,
   verifyCallback,
   deleteFile,
+  triggerPfop,
   generateVideoKey,
   generateImageKey,
   getPublicUrl(key) {

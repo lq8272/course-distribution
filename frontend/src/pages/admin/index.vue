@@ -286,12 +286,170 @@
 
     <!-- ===== 系统配置 ===== -->
     <block v-if="tab === 'config'">
-      <view class="state-card">
-        <view class="state-icon">⚙️</view>
-        <text class="state-text">系统配置</text>
-        <text class="state-hint">点击下方按钮进入配置页面</text>
-        <view class="btn-primary mt-32" @click="goConfig">打开配置页面</view>
+      <!-- 加载状态 -->
+      <view v-if="configLoading" class="state-card">
+        <view class="state-icon">⏳</view>
+        <text class="state-text">加载中...</text>
       </view>
+
+      <template v-else>
+
+        <!-- 平台配置 -->
+        <view class="section">
+          <view class="section-title">平台配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">平台名称</view>
+              <input class="config-input" v-model="configForm.platform_name" placeholder="请输入平台名称" />
+            </view>
+          </view>
+        </view>
+
+        <!-- 分销配置 -->
+        <view class="section">
+          <view class="section-title">分销配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">最大分销层级</view>
+              <input class="config-input" v-model="configForm.max_distribution_level" type="number" placeholder="如：3" />
+            </view>
+            <view class="config-item">
+              <view class="config-label">一级返佣比例</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.level1_rebate_rate" type="digit" placeholder="0.30" />
+                <text class="input-suffix">（如 0.30 = 30%）</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">二级返佣比例</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.level2_rebate_rate" type="digit" placeholder="0.05" />
+                <text class="input-suffix">（如 0.05 = 5%）</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">三级返佣比例</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.level3_rebate_rate" type="digit" placeholder="0.03" />
+                <text class="input-suffix">（如 0.03 = 3%）</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 提现配置 -->
+        <view class="section">
+          <view class="section-title">提现配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">最低提现额度</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.min_withdraw_amount" type="digit" placeholder="100" />
+                <text class="input-suffix">元</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 订单配置 -->
+        <view class="section">
+          <view class="section-title">订单配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">订单超时关闭</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.order_timeout_minutes" type="number" placeholder="30" />
+                <text class="input-suffix">分钟</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 申请费配置 -->
+        <view class="section">
+          <view class="section-title">申请费配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">达人申请费</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.apply_fee_dr" type="digit" placeholder="4980" />
+                <text class="input-suffix">元</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">梦想家申请费</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.apply_fee_mxj" type="digit" placeholder="29800" />
+                <text class="input-suffix">元</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">超合伙人申请费</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.apply_fee_cjhh" type="digit" placeholder="99800" />
+                <text class="input-suffix">元</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 拿货配置 -->
+        <view class="section">
+          <view class="section-title">拿货配置</view>
+          <view class="config-card">
+            <view class="config-item">
+              <view class="config-label">达人拿货价</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.purchase_price_dr" type="digit" placeholder="200" />
+                <text class="input-suffix">元/个</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">达人最低数量</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.min_purchase_qty_dr" type="number" placeholder="10" />
+                <text class="input-suffix">个</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">梦想家拿货价</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.purchase_price_mxj" type="digit" placeholder="150" />
+                <text class="input-suffix">元/个</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">梦想家最低数量</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.min_purchase_qty_mxj" type="number" placeholder="100" />
+                <text class="input-suffix">个</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">超合伙拿货价</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.purchase_price_cjhh" type="digit" placeholder="100" />
+                <text class="input-suffix">元/个</text>
+              </view>
+            </view>
+            <view class="config-item">
+              <view class="config-label">超合伙最低数量</view>
+              <view class="input-row">
+                <input class="config-input" v-model="configForm.min_purchase_qty_cjhh" type="number" placeholder="200" />
+                <text class="input-suffix">个</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 保存按钮 -->
+        <view class="save-bar">
+          <view class="btn-save" :class="{ loading: configSaving }" @click="saveConfig">
+            {{ configSaving ? '保存中...' : '保存配置' }}
+          </view>
+        </view>
+
+      </template>
     </block>
 
     <!-- ===== 数据统计 ===== -->
@@ -503,7 +661,10 @@ const userTotal = ref(0);
 const userKeyword = ref('');
 const filterAgentType = ref('all');
 
-// ===== 课程管理 state =====
+// ===== 配置 state =====
+const configLoading = ref(false);
+const configSaving = ref(false);
+const configForm = ref({});
 const courseList = ref([]);
 const courseTotal = ref(0);
 const coursePage = ref(1);
@@ -576,6 +737,8 @@ async function loadCurrentTab() {
       ]);
     } else if (tab.value === 'course') {
       await loadCourses();
+    } else if (tab.value === 'config') {
+      await loadConfig();
     }
   } catch (e) {
     console.error('load tab error', e);
@@ -662,6 +825,36 @@ async function confirmUpgradeReject() {
     closeReject();
   } catch {
     toast({ title: '操作失败', icon: 'none' });
+  }
+}
+
+// ===== 配置 =====
+async function loadConfig() {
+  configLoading.value = true;
+  try {
+    const res = await api.get('/admin/config');
+    const configs = res.data || [];
+    const map = {};
+    configs.forEach(c => { map[c.key] = c.value; });
+    configForm.value = map;
+  } catch (e) {
+    toast({ title: '加载配置失败', icon: 'none' });
+  } finally {
+    configLoading.value = false;
+  }
+}
+
+async function saveConfig() {
+  if (configSaving.value) return;
+  configSaving.value = true;
+  try {
+    const items = Object.entries(configForm.value).map(([key, value]) => ({ key, value: String(value) }));
+    await api.post('/admin/config', { items });
+    toast({ title: '保存成功', icon: 'success' });
+  } catch (e) {
+    toast({ title: '保存失败', icon: 'none' });
+  } finally {
+    configSaving.value = false;
   }
 }
 
@@ -983,10 +1176,6 @@ function getAvatarText(nickname) {
 }
 
 // ===== 系统配置 =====
-function goConfig() {
-  uni.navigateTo({ url: '/pages/admin/config/index' });
-}
-
 function goStats() {
   uni.navigateTo({ url: '/pages/admin/stats/index' });
 }
@@ -1583,7 +1772,90 @@ $shadow-card:   0 2rpx 16rpx rgba(0,0,0,0.06), 0 8rpx 32rpx rgba(0,0,0,0.04);
   background: none; border: none;
 }
 
-/* 全局按钮 & 工具类 */
+/* ===== 系统配置 ===== */
+.section {
+  margin-top: 24rpx;
+  padding: 0 24rpx;
+}
+.section-title {
+  font-size: 28rpx;
+  color: #999;
+  margin-bottom: 16rpx;
+  padding-left: 8rpx;
+}
+.config-card {
+  background: $card;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+.config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx;
+  border-bottom: 1rpx solid $border;
+  min-height: 96rpx;
+}
+.config-item:last-child {
+  border-bottom: none;
+}
+.config-label {
+  font-size: 30rpx;
+  color: $text-primary;
+  flex-shrink: 0;
+  margin-right: 24rpx;
+  min-width: 200rpx;
+}
+.config-input {
+  flex: 1;
+  text-align: right;
+  font-size: 30rpx;
+  color: $text-primary;
+  background: transparent;
+  outline: none;
+}
+.config-input:disabled {
+  color: #999;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: flex-end;
+}
+.input-suffix {
+  font-size: 26rpx;
+  color: $text-muted;
+  margin-left: 8rpx;
+  white-space: nowrap;
+}
+.save-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: $card;
+  border-top: 1rpx solid $border;
+  z-index: 100;
+}
+.btn-save {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  background: $primary;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 600;
+  border-radius: 44rpx;
+}
+.btn-save.loading {
+  opacity: 0.6;
+}
+
+/* ===== 状态卡片 ===== */
 .btn-primary {
   display: inline-flex;
   align-items: center;

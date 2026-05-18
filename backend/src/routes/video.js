@@ -9,10 +9,11 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { auth, adminAuth } = require('../middleware/auth');
 const videoService = require('../services/video');
 const db = require('../config/database');
 const { getConfig } = require('../config');
+const { getRedis } = require('../config/redis');
 
 // GET /api/video/list 视频列表（返回有视频的课程）
 router.get('/list', auth, async (req, res) => {
@@ -56,7 +57,8 @@ router.post('/upload-token', auth, async (req, res) => {
 
     // 校验课程存在性，防止伪造 course_id 上传到不存在课程目录
     const [courses] = await db.query('SELECT id FROM courses WHERE id = ? LIMIT 1', [parseInt(course_id)]);
-    if (!courses.length) {
+    const course = Array.isArray(courses) ? courses[0] : courses;
+    if (!course) {
       return res.status(404).json({ code: 40400, message: '课程不存在' });
     }
 
@@ -87,7 +89,8 @@ router.post('/image-token', auth, async (req, res) => {
 
     // 校验课程存在性
     const [courses] = await db.query('SELECT id FROM courses WHERE id = ? LIMIT 1', [parseInt(course_id)]);
-    if (!courses.length) {
+    const course = Array.isArray(courses) ? courses[0] : courses;
+    if (!course) {
       return res.status(404).json({ code: 40400, message: '课程不存在' });
     }
 
@@ -99,6 +102,95 @@ router.post('/image-token', auth, async (req, res) => {
   } catch (err) {
     console.error('[video/image-token]', err.message);
     res.status(500).json({ code: 50000, message: err.message || '获取上传凭证失败' });
+  }
+});
+
+// ==================== 上传成功后通知后端 ====================
+// POST /api/video/uploaded
+// 前端上传MP4到七牛成功后调用，触发PFOP转码
+// Body: { course_id, mp4_key }
+// 返回: { status, persistent_id }
+router.post('/uploaded', auth, adminAuth, async (req, res) => {
+  try {
+    // adminAuth already checks is_admin
+    const { course_id, mp4_key } = req.body;
+    if (!course_id || !mp4_key) {
+      return res.status(400).json({ code: 40000, message: '缺少 course_id 或 mp4_key' });
+    }
+
+    const courseId = parseInt(course_id);
+    const [courses] = await db.query('SELECT id FROM courses WHERE id = ? LIMIT 1', [courseId]);
+    if (!courses || (Array.isArray(courses) && !courses.length)) {
+      return res.status(404).json({ code: 40400, message: '课程不存在' });
+    }
+
+    // 回调地址（依赖 api.hhlfedu.com DNS 生效）
+    const callbackUrl = `http://api.hhlfedu.com/api/video/notify`;
+
+    // 1. 触发 PFOP 转码
+    let persistentId;
+    if (videoService.isConfigured()) {
+      const result = await videoService.triggerPfop(courseId, mp4_key, callbackUrl);
+      persistentId = result.persistentId;
+
+      // 2. 存 Redis 映射：persistentId → { courseId, mp4_key }（7天过期）
+      const redis = getRedis();
+      await redis.set(
+        `video_pfop:${persistentId}`,
+        JSON.stringify({ courseId, mp4_key }),
+        'EX', 7 * 86400
+      );
+    }
+
+    // 3. 更新课程状态为"转码中"
+    await db.execute(
+      'UPDATE courses SET video_key = ?, video_status = ?, updated_at = NOW() WHERE id = ?',
+      [mp4_key, 'transcoding', courseId]
+    );
+
+    res.json({
+      code: 0,
+      data: { status: 'transcoding', persistent_id: persistentId || null },
+      message: '转码已触发',
+    });
+  } catch (err) {
+    console.error('[video/uploaded]', err.message);
+    res.status(500).json({ code: 50000, message: err.message || '触发转码失败' });
+  }
+});
+
+// ==================== 查询转码状态 ====================
+// GET /api/video/status/:courseId
+// 前端轮询此接口查询转码进度
+router.get('/status/:courseId', async (req, res) => {
+  try {
+    const courseId = parseInt(req.params.courseId);
+    if (!courseId) {
+      return res.status(400).json({ code: 40000, message: '缺少 courseId' });
+    }
+
+    const [courses] = await db.query(
+      'SELECT id, video_key, video_url, video_status FROM courses WHERE id = ? LIMIT 1',
+      [courseId]
+    );
+    // courses 可能是 RowDataPacket 对象（单个）或 RowDataPacket[] 数组（批量）
+    if (!courses || (Array.isArray(courses) && !courses.length)) {
+      return res.status(404).json({ code: 40400, message: '课程不存在' });
+    }
+
+    const course = Array.isArray(courses) ? courses[0] : courses;
+    res.json({
+      code: 0,
+      data: {
+        status: course.video_status || 'none',
+        video_url: course.video_url || null,
+        video_key: course.video_key || null,
+      },
+      message: '成功',
+    });
+  } catch (err) {
+    console.error('[video/status]', err.message);
+    res.status(500).json({ code: 50000, message: '查询失败' });
   }
 });
 
@@ -200,58 +292,77 @@ router.post('/notify', async (req, res) => {
       return res.json({ code: 0, data: null, message: '无处理项目' });
     }
 
-    // 2. 幂等防护：基于七牛持久化 ID（persistentId）去重
-    //    七牛回调包含 persistentId，同一转码任务只回调一次，但网络重试可能产生重复
+    // 2. 幂等防护 + 从 Redis 取 courseId 映射
     const redis = getRedis();
     const results = [];
     for (const item of items) {
-      const { code, description, hash, key, fsize, mimeType, persistentId } = item;
+      const { code, description, key, persistentId } = item;
 
       if (code !== 0) {
         console.error('[video/notify] 转码失败:', description);
+        // 转码失败，更新状态
+        if (persistentId) {
+          const mappingStr = await redis.get(`video_pfop:${persistentId}`);
+          if (mappingStr) {
+            const { courseId } = JSON.parse(mappingStr);
+            await db.execute(
+              'UPDATE courses SET video_status = ?, updated_at = NOW() WHERE id = ?',
+              ['failed', courseId]
+            );
+          }
+        }
         results.push({ key, success: false, error: description });
         continue;
       }
 
-      // 基于 persistentId 做幂等检查（如果七牛提供了）
+      // 幂等检查
       if (persistentId) {
         const idempotentKey = `video_notify:${persistentId}`;
         const already = await redis.get(idempotentKey);
         if (already) {
-          console.log(`[video/notify] 重复回调忽略 persistentId=${persistentId}, key=${key}`);
+          console.log(`[video/notify] 重复回调忽略 persistentId=${persistentId}`);
           results.push({ key, success: true, duplicate: true });
           continue;
         }
-        // 标记已处理（TTL=24小时，防止内存泄漏）
         await redis.set(idempotentKey, '1', 'EX', 86400);
       }
 
-      // 从key提取course_id（格式：videos/course_{id}_xxx.m3u8）
-      const match = key.match(/videos\/course_(\d+)_\d+\.m3u8$/);
-      if (!match) {
-        console.error('[video/notify] 无法解析course_id from key:', key);
-        results.push({ key, success: false, error: 'key格式不匹配' });
+      // 从 Redis 取 courseId（由 /uploaded 接口写入）
+      let courseId = null;
+      if (persistentId) {
+        const mappingStr = await redis.get(`video_pfop:${persistentId}`);
+        if (mappingStr) {
+          const mapping = JSON.parse(mappingStr);
+          courseId = mapping.courseId;
+          // 清理映射
+          await redis.del(`video_pfop:${persistentId}`);
+        }
+      }
+
+      // 兜底：从 key 匹配 course_id（m3u8 key 格式不固定，跳过此方式）
+      if (!courseId) {
+        console.error('[video/notify] 无法获取 courseId，Redis 无映射 persistentId=', persistentId);
+        results.push({ key, success: false, error: 'courseId未找到' });
         continue;
       }
 
-      const courseId = parseInt(match[1]);
-
       // 校验课程存在性
       const [courses] = await db.query('SELECT id FROM courses WHERE id = ?', [courseId]);
-      if (!courses.length) {
+      const course = Array.isArray(courses) ? courses[0] : courses;
+      if (!course) {
         console.error('[video/notify] 课程不存在:', courseId);
         results.push({ key, success: false, error: '课程不存在' });
         continue;
       }
 
-      // 更新数据库：video_url 存原始m3u8的key（不含域名）
+      // 更新数据库：video_url 存 m3u8 key，状态设为已就绪
       await db.execute(
-        'UPDATE courses SET video_url = ?, updated_at = NOW() WHERE id = ?',
-        [key, courseId]
+        'UPDATE courses SET video_url = ?, video_status = ?, updated_at = NOW() WHERE id = ?',
+        [key, 'ready', courseId]
       );
 
       results.push({ courseId, key, success: true });
-      console.log(`[video/notify] 课程 ${courseId} 视频更新: ${key}`);
+      console.log(`[video/notify] 课程 ${courseId} 视频就绪: ${key}`);
     }
 
     res.json({ code: 0, data: results, message: '成功' });
@@ -268,10 +379,12 @@ router.delete('/:key(*)', auth, async (req, res) => {
     if (!req.user.is_admin) {
       return res.status(403).json({ code: 40300, message: '需要管理员权限' });
     }
-
     const key = decodeURIComponent(req.params.key);
     const result = await videoService.deleteFile(key);
-
+    await db.execute(
+      'UPDATE courses SET video_key = NULL, video_url = NULL, video_status = ?, updated_at = NOW() WHERE video_key = ? OR video_url = ?',
+      ['none', key, key]
+    );
     res.json({ code: 0, data: result, message: '删除完成' });
   } catch (err) {
     console.error('[video/delete]', err.message);

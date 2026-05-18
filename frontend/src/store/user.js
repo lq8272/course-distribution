@@ -11,7 +11,7 @@ export const useUserStore = defineStore('user', () => {
 
   // 计算属性
   const isLoggedIn = computed(() => !!token.value);
-  const isAdmin = computed(() => userInfo.value && userInfo.value.is_admin === true);
+  const isAdmin = computed(() => userInfo.value && (userInfo.value.is_admin === true || userInfo.value.is_admin === 1));
 
   // 方法
   const setAuth = (data, newToken, newRefreshToken) => {

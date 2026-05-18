@@ -12,15 +12,28 @@
 <template>
   <view class="video-uploader">
     <!-- 已上传状态 -->
-    <view class="uploaded" v-if="videoKey && !uploading">
+    <view class="uploaded" v-if="videoKey && !uploading && !transcoding">
       <video class="preview" :src="previewUrl" :poster="poster" controls />
       <view class="uploaded__info">
         <text class="uploaded__name">{{ fileName || '视频文件' }}</text>
-        <text class="uploaded__status">已上传</text>
+        <text class="uploaded__status">已就绪</text>
       </view>
       <view class="uploaded__actions">
         <text class="btn-replace" @click="chooseFile">替换视频</text>
         <text class="btn-delete" @click="deleteVideo">删除</text>
+      </view>
+    </view>
+
+    <!-- 转码中状态 -->
+    <view class="uploading" v-if="transcoding">
+      <view class="progress-circle">
+        <view class="progress-circle__inner" :style="{ '--p': '100%' }">
+          <text class="progress-text">转码中</text>
+        </view>
+      </view>
+      <view class="uploading__info">
+        <text class="uploading__name">{{ fileName }}</text>
+        <text class="uploading__status">{{ uploadStatusText }}</text>
       </view>
     </view>
 
@@ -47,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { api } from '@/api/index';
 
 const props = defineProps({
@@ -83,6 +96,11 @@ const fileName = ref('');
 
 // 当前预览 URL（带签名）
 const previewUrl = ref('');
+
+// 转码状态
+const transcoding = ref(false);   // 是否在转码中
+const transcodingStatus = ref(''); // 'transcoding' | 'ready' | 'failed'
+let pollTimer = null;
 
 // 监听外部 modelValue 变化
 watch(() => props.modelValue, (val) => {
@@ -166,27 +184,84 @@ async function uploadVideo(file) {
     // 3. 七牛直传（使用 qiniu-js SDK）
     await doQiniuUpload(file, token, key);
 
-    progress.value = 100;
-    uploadStatusText.value = '上传完成';
+    // 4. 通知后端上传成功，触发 PFOP 转码
+    uploadStatusText.value = '等待转码...';
+    try {
+      await api.post('/video/uploaded', {
+        course_id: courseId,
+        mp4_key: key,
+      });
+    } catch (e) {
+      console.warn('[video-uploader] 触发转码失败（可能DNS未生效）:', e);
+    }
 
-    // 4. 更新父组件
+    // 5. 立即更新父组件的 video_key（原始MP4）
     emit('update:modelValue', key);
     emit('change', { key, file });
 
-    // 5. 刷新预览
-    await refreshPreviewUrl(key);
+    // 6. 开始轮询转码状态
+    startPolling(courseId);
 
-    uni.showToast({ title: '上传成功', icon: 'none' });
+    uploading.value = false;
+    emit('upload-end');
   } catch (err) {
     console.error('upload error', err);
     uploadStatusText.value = '上传失败';
     uni.showToast({ title: err.message || '上传失败', icon: 'none' });
     emit('error', err);
-  } finally {
-    uploading.value = false;
-    emit('upload-end');
   }
 }
+
+// ==================== 转码状态轮询 ====================
+function startPolling(courseId) {
+  stopPolling();
+  transcoding.value = true;
+  transcodingStatus.value = 'transcoding';
+  uploadStatusText.value = '视频转码中...';
+
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await api.get(`/video/status/${courseId}`);
+      const data = res?.data || res || {};
+      const status = data.status || data.video_status;
+
+      if (status === 'ready') {
+        stopPolling();
+        // 转码成功：video_url 已是 m3u8 key
+        const m3u8Key = data.video_url;
+        if (m3u8Key) {
+          videoKey.value = m3u8Key;
+          emit('update:modelValue', m3u8Key);
+          await refreshPreviewUrl(m3u8Key);
+        }
+        uploadStatusText.value = '转码完成';
+        transcodingStatus.value = 'ready';
+        uni.showToast({ title: '视频转码完成', icon: 'none' });
+      } else if (status === 'failed') {
+        stopPolling();
+        uploadStatusText.value = '转码失败';
+        transcodingStatus.value = 'failed';
+        uni.showToast({ title: '视频转码失败，请重试', icon: 'none' });
+      }
+      // transcoding 状态继续轮询
+    } catch (e) {
+      console.warn('[video-uploader] 轮询失败:', e);
+    }
+  }, 5000); // 每5秒轮询一次
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  transcoding.value = false;
+}
+
+// 组件卸载时清理
+onUnmounted(() => {
+  stopPolling();
+});
 
 // 七牛直传（前端 SDK）
 function doQiniuUpload(file, token, key) {
@@ -199,8 +274,8 @@ function doQiniuUpload(file, token, key) {
 
     // 使用微信的 chooseMessageFile 已经选好了文件
     // 这里直接用 fetch PUT 到七牛上传地址
-    // 七牛上传域名（华北 z1）
-    const uploadHost = 'https://up-z1.qiniup.com';
+    // 七牛上传域名（华南 z2）
+    const uploadHost = 'https://up-z2.qiniup.com';
 
     uni.uploadFile({
       url: uploadHost,
@@ -249,6 +324,7 @@ async function deleteVideo() {
     success: async (res) => {
       if (!res.confirm) return;
       try {
+        stopPolling();
         await api.delete(`/video/${videoKey.value}`);
         videoKey.value = '';
         previewUrl.value = '';
