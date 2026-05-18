@@ -111,22 +111,41 @@ const Order = {
   },
 
   // 订单超时关闭（定时任务：created_at < NOW() - 30min 且 status=0）
+  // 修复：使用 FOR UPDATE 锁定订单防止并发关闭，UPDATE 使用与 SELECT 相同的 WHERE 条件防止 TOCTOU
   async closeTimeout() {
-    const [rows] = await db.query(
-      `SELECT id, user_id, course_id, created_at FROM orders
-       WHERE status = 0 AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)`
-    );
-    if (!rows.length) return 0;
-    await db.query(
-      `UPDATE orders SET status = 4
-       WHERE status = 0 AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)`
-    );
-    // 审计日志：记录每笔超时关闭的订单详情
-    for (const o of rows) {
-      const age = Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000);
-      console.warn(`[OrderTimeout] 订单 #${o.id} 用户 #${o.user_id} 课程 #${o.course_id} 超时 ${age}min 已自动关闭`);
+    const conn = await db.getConnection();
+    await conn.beginTransaction();
+    try {
+      // FOR UPDATE 锁住待关闭订单（防止并发定时任务重复处理）
+      const [rows] = await conn.query(
+        `SELECT id, user_id, course_id, created_at FROM orders
+         WHERE status = 0 AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+         FOR UPDATE`
+      );
+      if (!rows.length) {
+        await conn.rollback();
+        conn.release();
+        return 0;
+      }
+      const orderIds = rows.map(r => r.id);
+      // UPDATE 与 SELECT 使用完全相同的 WHERE 条件，保证原子性
+      await conn.execute(
+        `UPDATE orders SET status = 4
+         WHERE status = 0 AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE))`
+      );
+      await conn.commit();
+      // 审计日志
+      for (const o of rows) {
+        const age = Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000);
+        console.warn(`[OrderTimeout] 订单 #${o.id} 用户 #${o.user_id} 课程 #${o.course_id} 超时 ${age}min 已自动关闭`);
+      }
+      conn.release();
+      return rows.length;
+    } catch (e) {
+      await conn.rollback();
+      conn.release();
+      throw e;
     }
-    return rows.length;
   },
 
   // 管理员退款（status=1→3，调用 Commission.revokeForOrder 撤销佣金）

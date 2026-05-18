@@ -221,7 +221,8 @@ const Commission = {
       if (shouldRelease) conn.release();
       return { revoked: pending.length, withdrawn: 0 };
     } catch (e) {
-      await conn.rollback();  // 无条件回滚，fail-safe
+      // 仅在自主管理事务时回滚；若调用方传入 existingConn，则由调用方负责事务处理
+      if (shouldCommit) await conn.rollback();
       if (shouldRelease) conn.release();
       throw e;
     }

@@ -40,7 +40,19 @@ const Agent = {
       ),
       db.query('SELECT COUNT(*) as cnt FROM agents WHERE status = 0'),
     ]);
-    return { rows, total: total[0].cnt };
+    // 脱敏：只暴露序号+nickname，不暴露 user_id（防止openid泄露）
+    return {
+      rows: rows.map((r, idx) => ({
+        seq: offset + idx + 1,
+        nickname: r.nickname || '未知用户',
+        level: r.level,
+        gift_quantity: r.gift_quantity,
+        recommender_id: r.recommender_id,
+        status: r.status,
+        created_at: r.created_at,
+      })),
+      total: total[0].cnt
+    };
   },
 
   /**
@@ -211,7 +223,20 @@ const Agent = {
       ),
       db.query('SELECT COUNT(*) as cnt FROM agent_upgrades WHERE status = 0'),
     ]);
-    return { rows, total: total[0].cnt };
+    // 脱敏：不暴露 user_id，只暴露 nickname
+    return {
+      rows: rows.map((r, idx) => ({
+        seq: offset + idx + 1,
+        nickname: r.nickname || '未知用户',
+        from_level: r.from_level,
+        to_level: r.to_level,
+        apply_fee: r.apply_fee,
+        remark: r.remark,
+        referral_count: r.referral_count,
+        created_at: r.created_at,
+      })),
+      total: total[0].cnt
+    };
   },
 
   // 升级审核通过
@@ -227,13 +252,7 @@ const Agent = {
       }
       const upgrade = upg[0];
 
-      // 1. 更新 agent_upgrades 状态
-      await conn.execute(
-        'UPDATE agent_upgrades SET status = 1, confirmed_by = ?, confirm_time = NOW() WHERE id = ?',
-        [adminId, id]
-      );
-
-      // 2. 拿货数量校验（从 configs 表查目标等级的最低拿货要求）
+      // 1. 校验拿货数量（先校验，再更新状态）
       const toLevel = upgrade.to_level.toLowerCase();
       const [[agentRow]] = await conn.execute('SELECT total_purchase, referral_count FROM agents WHERE user_id = ? AND status = 1', [upgrade.user_id]);
       const [[cfg]] = await conn.execute("SELECT value FROM configs WHERE `key` = ?", [`min_purchase_qty_${toLevel}`]);
@@ -244,7 +263,7 @@ const Agent = {
         throw new Error(`拿货数量不足，无法升级（需至少 ${minPurchase} 个，已完成 ${agentRow.total_purchase || 0} 个）`);
       }
 
-      // 2b. 推荐人数校验（从 agent_levels 表查目标等级的 upgrade_referral_min）
+      // 1b. 推荐人数校验
       const [levelCfg] = await conn.query('SELECT upgrade_referral_min FROM agent_levels WHERE level = ? LIMIT 1', [upgrade.to_level]);
       if (!levelCfg?.length) {
         await conn.rollback();
@@ -257,6 +276,12 @@ const Agent = {
         conn.release();
         throw new Error(`推荐人数不足，无法升级（需推荐至少 ${minReferrals} 人，已推荐 ${agentRow.referral_count || 0} 人）`);
       }
+
+      // 2. 校验通过后再更新 agent_upgrades 状态
+      await conn.execute(
+        'UPDATE agent_upgrades SET status = 1, confirmed_by = ?, confirm_time = NOW() WHERE id = ?',
+        [adminId, id]
+      );
 
       // 3. 更新 agents.level 为新等级
       await conn.execute(
@@ -358,9 +383,9 @@ async function updateDescendantsRootId(conn, newRootId, startUserId) {
     queue.push(...childIds);
     processed += childIds.length;
 
-    // 安全保护：超过 10000 人为异常，强制停止（防止循环引用攻击）
+    // 安全保护：超过 10000 人为异常，强制停止并回滚事务（防止循环引用攻击或数据异常）
     if (processed > 10000) {
-      console.warn(`[updateDescendantsRootId] 超出安全上限 10000 人，强制停止`);
+      throw new Error('团队规模超出安全上限（10000人），请联系技术支持');
       break;
     }
   }

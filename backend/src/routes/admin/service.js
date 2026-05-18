@@ -37,7 +37,9 @@ router.get('/list', auth, adminAuth, async (req, res) => {
     sql += ' ORDER BY cs.id DESC';
 
     const rows = await db.query(sql, params);
-    return res.json({ code: 0, data: { rows }, message: '成功' });
+    // 脱敏手机号
+    const masked = rows.map(r => ({ ...r, user_phone: maskPhone(r.user_phone) }));
+    return res.json({ code: 0, data: { rows: masked }, message: '成功' });
   } catch (err) {
     console.error('[admin/service/list]', err);
     return res.status(500).json({ code: 50000, message: '查询失败' });

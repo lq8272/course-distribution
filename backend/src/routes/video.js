@@ -54,6 +54,12 @@ router.post('/upload-token', auth, async (req, res) => {
       return res.status(400).json({ code: 40000, message: '缺少 course_id 或 filename' });
     }
 
+    // 校验课程存在性，防止伪造 course_id 上传到不存在课程目录
+    const [courses] = await db.query('SELECT id FROM courses WHERE id = ? LIMIT 1', [parseInt(course_id)]);
+    if (!courses.length) {
+      return res.status(404).json({ code: 40400, message: '课程不存在' });
+    }
+
     // 生成七牛存储key
     const key = videoService.generateVideoKey(course_id, filename);
     const { token, key: returnedKey, expires } = videoService.createUploadToken(key);
@@ -77,6 +83,12 @@ router.post('/image-token', auth, async (req, res) => {
     const { course_id, filename } = req.body;
     if (!course_id || !filename) {
       return res.status(400).json({ code: 40000, message: '缺少 course_id 或 filename' });
+    }
+
+    // 校验课程存在性
+    const [courses] = await db.query('SELECT id FROM courses WHERE id = ? LIMIT 1', [parseInt(course_id)]);
+    if (!courses.length) {
+      return res.status(404).json({ code: 40400, message: '课程不存在' });
     }
 
     // 生成图片key
@@ -148,6 +160,7 @@ router.get('/cdn-url/:key(*)', async (req, res) => {
 // POST /api/video/notify
 // 七牛云视频转码完成后回调此接口，更新课程视频地址
 // 鉴权：X-Qiniu-Signature = HMAC-SHA1(callbackSecret, rawBody)
+// 幂等防护：基于 persistentId 缓存去重，重复回调返回成功不重复处理
 router.post('/notify', async (req, res) => {
   try {
     // 1. HMAC 签名验证（基于回调 body）
@@ -173,7 +186,6 @@ router.post('/notify', async (req, res) => {
     const items = body.items;
 
     // 验证是否是转码完成事件（兼容中英文事件名）
-    // 七牛云事件名：TranscodeFinished / fop_done / workflow_finished
     const isTranscoded = events && (
       events.includes('TranscodeFinished') ||
       events.includes('fop_done') ||
@@ -181,7 +193,6 @@ router.post('/notify', async (req, res) => {
       events.includes('转码完成')
     );
     if (!isTranscoded) {
-      // 可能是其他事件，直接返回成功
       return res.json({ code: 0, data: null, message: '忽略非转码事件' });
     }
 
@@ -189,15 +200,30 @@ router.post('/notify', async (req, res) => {
       return res.json({ code: 0, data: null, message: '无处理项目' });
     }
 
-    // 遍历处理每个转码完成的项目
+    // 2. 幂等防护：基于七牛持久化 ID（persistentId）去重
+    //    七牛回调包含 persistentId，同一转码任务只回调一次，但网络重试可能产生重复
+    const redis = getRedis();
     const results = [];
     for (const item of items) {
-      const { code, description, hash, key, fsize, mimeType } = item;
+      const { code, description, hash, key, fsize, mimeType, persistentId } = item;
 
       if (code !== 0) {
         console.error('[video/notify] 转码失败:', description);
         results.push({ key, success: false, error: description });
         continue;
+      }
+
+      // 基于 persistentId 做幂等检查（如果七牛提供了）
+      if (persistentId) {
+        const idempotentKey = `video_notify:${persistentId}`;
+        const already = await redis.get(idempotentKey);
+        if (already) {
+          console.log(`[video/notify] 重复回调忽略 persistentId=${persistentId}, key=${key}`);
+          results.push({ key, success: true, duplicate: true });
+          continue;
+        }
+        // 标记已处理（TTL=24小时，防止内存泄漏）
+        await redis.set(idempotentKey, '1', 'EX', 86400);
       }
 
       // 从key提取course_id（格式：videos/course_{id}_xxx.m3u8）
@@ -210,7 +236,7 @@ router.post('/notify', async (req, res) => {
 
       const courseId = parseInt(match[1]);
 
-      // 校验课程存在性，防止伪造key更新不存在的课程
+      // 校验课程存在性
       const [courses] = await db.query('SELECT id FROM courses WHERE id = ?', [courseId]);
       if (!courses.length) {
         console.error('[video/notify] 课程不存在:', courseId);

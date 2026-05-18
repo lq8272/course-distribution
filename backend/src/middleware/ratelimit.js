@@ -17,17 +17,20 @@ function rateLimit({ windowSec = 60, max = 60, keyPrefix = 'ratelimit' } = {}) {
       return next();
     }
 
-    const rawIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    const ip = rawIp.startsWith('::ffff:') ? rawIp.slice(7) : rawIp;
+    // 优先取 X-Real-IP（ngxin 默认传），其次 X-Forwarded-For 第一段（多层代理场景）
+    // 避免直接用 X-Forwarded-For 伪造IP绕过限流：X-Forwarded-For 可被客户端任意设置
+    const realIp = req.get('X-Real-IP');
+    const forwarded = req.get('X-Forwarded-For');
+    let ip = forwarded ? forwarded.split(',')[0].trim() : (realIp || req.ip || 'unknown');
+    ip = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
     const key = `rl:${keyPrefix}:${ip}`;
     const redis = getRedis();
 
     try {
-      const multi = redis.multi();
-      multi.incr(key);
-      multi.expire(key, windowSec);
-      const results = await multi.exec();
-      const count = results[0][1];
+      // Redis SET NX + EX 原子操作，等价于 INCR + EXPIRE，且防止超限后新请求覆盖旧TTL
+      const result = await redis.set(key, '1', 'NX', 'EX', windowSec);
+      const isNew = result === 'OK'; // 'OK' = 首次请求，null = 已存在
+      const count = isNew ? 1 : await redis.incr(key);
 
       if (count > max) {
         const retryAfter = await redis.ttl(key);

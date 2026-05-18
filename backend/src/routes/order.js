@@ -111,8 +111,12 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/:id/confirm', auth, async (req, res) => {
   try {
     if (!req.user.is_admin) return fail(res, 403, 40300, '需要管理员权限');
-    const order = await Order.confirm(parseInt(req.params.id));
-    if (!order) return fail(res, 400, 40000, '订单不存在或状态不可确认');
+    const orderId = parseInt(req.params.id);
+    const order = await Order.findById(orderId);
+    if (!order) return fail(res, 404, 40400, '订单不存在');
+    if (order.status !== 0) return fail(res, 400, 40000, '订单状态不可确认（需为待确认状态）');
+
+    const updated = await Order.confirm(orderId);
 
     // 佣金已在 Order.confirm() 内部事务中结算完毕（T+0），此处不再重复调用
     // 仅清除团队树缓存
