@@ -73,6 +73,7 @@ services:
       QINIU_PUBLIC_DOMAIN: ${QINIU_PUBLIC_DOMAIN:-}
       QINIU_VIDEO_DOMAIN: ${QINIU_VIDEO_DOMAIN:-videos.hhlfedu.com}
       QINIU_URL_EXPIRE: 3600
+      QINIU_ZONE: ${QINIU_ZONE:-z0}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     depends_on:

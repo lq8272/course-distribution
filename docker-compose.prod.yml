@@ -44,6 +44,7 @@ services:
       QINIU_PUBLIC_DOMAIN: ${QINIU_PUBLIC_DOMAIN:-}
       QINIU_VIDEO_DOMAIN: ${QINIU_VIDEO_DOMAIN:-videos.hhlfedu.com}
       QINIU_URL_EXPIRE: 3600
+      QINIU_ZONE: ${QINIU_ZONE:-z0}
     volumes:
       # 注意：./backend:/app 仍然保留（开发时代码热更新），但生产建议去掉
       # 只保留命名卷保护 node_modules
