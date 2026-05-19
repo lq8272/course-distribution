@@ -27,7 +27,7 @@ const BUCKET_VIDEO = process.env.QINIU_BUCKET_VIDEO || '';
 // 公开域名前缀（图片 bucket 的 CDN 域名）
 const PUBLIC_DOMAIN = process.env.QINIU_PUBLIC_DOMAIN || '';
 // 视频 bucket 域名（私有 bucket 签名用，用于视频播放）
-const VIDEO_DOMAIN = process.env.QINIU_VIDEO_DOMAIN || PUBLIC_DOMAIN;
+const VIDEO_DOMAIN = process.env.QINIU_VIDEO_DOMAIN || PUBLIC_DOMAIN || 'videos.hhlfedu.com';
 // 私有bucket签名URL有效期（秒），默认1小时
 const SIGNED_URL_EXPIRE = parseInt(process.env.QINIU_URL_EXPIRE || '3600');
 // 七牛 bucket 区域（影响 API 请求节点）：
