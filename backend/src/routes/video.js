@@ -12,7 +12,7 @@ const router = express.Router();
 const { auth, adminAuth } = require('../middleware/auth');
 const videoService = require('../services/video');
 const db = require('../config/database');
-const { getConfig } = require('../config');
+const config = require('../config');
 const { getRedis } = require('../config/redis');
 
 // GET /api/video/list 视频列表（返回有视频的课程）
@@ -125,7 +125,7 @@ router.post('/uploaded', auth, adminAuth, async (req, res) => {
     }
 
     // 回调地址（依赖 api.hhlfedu.com DNS 生效）
-    const callbackUrl = `http://api.hhlfedu.com/api/video/notify`;
+    const callbackUrl = `https://api.hhlfedu.com/api/video/notify`;
 
     // 1. 触发 PFOP 转码
     let persistentId;
@@ -256,7 +256,7 @@ router.get('/cdn-url/:key(*)', async (req, res) => {
 router.post('/notify', async (req, res) => {
   try {
     // 1. HMAC 签名验证（基于回调 body）
-    const callbackSecret = getConfig('qiniu.callbackSecret');
+    const callbackSecret = config.qiniu?.callbackSecret;
     if (callbackSecret) {
       const sig = req.get('X-Qiniu-Signature');
       if (!sig) {
@@ -293,7 +293,9 @@ router.post('/notify', async (req, res) => {
     }
 
     // 2. 幂等防护 + 从 Redis 取 courseId 映射
+    console.log('[video/notify] 开始处理, items count:', items ? items.length : 0);
     const redis = getRedis();
+    console.log('[video/notify] Redis连接成功');
     const results = [];
     for (const item of items) {
       const { code, description, key, persistentId } = item;
@@ -331,9 +333,13 @@ router.post('/notify', async (req, res) => {
       let courseId = null;
       if (persistentId) {
         const mappingStr = await redis.get(`video_pfop:${persistentId}`);
-        if (mappingStr) {
-          const mapping = JSON.parse(mappingStr);
-          courseId = mapping.courseId;
+        if (mappingStr && mappingStr !== 'null') {
+          try {
+            const mapping = JSON.parse(mappingStr);
+            courseId = mapping?.courseId ?? null;
+          } catch {
+            courseId = null;
+          }
           // 清理映射
           await redis.del(`video_pfop:${persistentId}`);
         }
@@ -367,7 +373,7 @@ router.post('/notify', async (req, res) => {
 
     res.json({ code: 0, data: results, message: '成功' });
   } catch (err) {
-    console.error('[video/notify]', err);
+    console.error('[video/notify]', err.stack || err.message || err);
     res.status(500).json({ code: 50000, message: '处理回调失败' });
   }
 });
