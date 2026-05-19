@@ -125,7 +125,7 @@ router.post('/uploaded', auth, adminAuth, async (req, res) => {
     }
 
     // 回调地址（依赖 api.hhlfedu.com DNS 生效）
-    const callbackUrl = `https://api.hhlfedu.com/api/video/notify`;
+    const callbackUrl = `https://api.hhlfedu.com/api/v1/video/notify`;
 
     // 1. 触发 PFOP 转码
     let persistentId;
@@ -279,12 +279,15 @@ router.post('/notify', async (req, res) => {
 
     // 验证是否是转码完成事件（兼容中英文事件名）
     const isTranscoded = events && (
-      events.includes('TranscodeFinished') ||
-      events.includes('fop_done') ||
-      events.includes('workflow_finished') ||
-      events.includes('转码完成')
+      (Array.isArray(events) && events.some(e => typeof e === 'string' && (
+        e.includes('TranscodeFinished') || e.includes('fop_done') || e.includes('workflow_finished') || e.includes('转码完成')
+      ))) ||
+      (typeof events === 'string' && (
+        events.includes('TranscodeFinished') || events.includes('fop_done') || events.includes('workflow_finished') || events.includes('转码完成')
+      ))
     );
     if (!isTranscoded) {
+      console.log('[video/notify] 忽略非转码事件, events=', JSON.stringify(events).substring(0, 200));
       return res.json({ code: 0, data: null, message: '忽略非转码事件' });
     }
 
