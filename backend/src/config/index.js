@@ -60,8 +60,8 @@ module.exports = {
   },
 
   wechat: {
-    appid: process.env.WECHAT_APPID || '',
-    secret: process.env.WECHAT_SECRET || '',
+    appid: process.env.WX_APPID || process.env.WECHAT_APPID || 'wx95b62970cb11c3c0',
+    secret: process.env.WX_SECRET || process.env.WECHAT_SECRET || '9ba9576cca9786a1d64e48d5d4465efd',
   },
 
   oss: {

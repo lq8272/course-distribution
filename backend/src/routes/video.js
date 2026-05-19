@@ -287,7 +287,8 @@ router.post('/notify', async (req, res) => {
       ))
     );
     if (!isTranscoded) {
-      console.log('[video/notify] 忽略非转码事件, events=', JSON.stringify(events).substring(0, 200));
+      const evStr = events === undefined ? 'undefined' : JSON.stringify(events);
+      console.log('[video/notify] 忽略非转码事件, events=', evStr ? evStr.substring(0, 200) : events);
       return res.json({ code: 0, data: null, message: '忽略非转码事件' });
     }
 
@@ -296,9 +297,14 @@ router.post('/notify', async (req, res) => {
     }
 
     // 2. 幂等防护 + 从 Redis 取 courseId 映射
-    console.log('[video/notify] 开始处理, items count:', items ? items.length : 0);
     const redis = getRedis();
-    console.log('[video/notify] Redis连接成功');
+    console.log('[video/notify] Redis连接成功, body.id:', body.id);
+    try {
+      const mappingStr = await redis.get(`video_pfop:${body.id}`);
+      console.log('[video/notify] Redis mappingStr:', mappingStr);
+    } catch (redisErr) {
+      console.error('[video/notify] Redis get错误:', redisErr.message);
+    }
     const results = [];
     for (const item of items) {
       const { code, description, key, persistentId } = item;
@@ -376,8 +382,15 @@ router.post('/notify', async (req, res) => {
 
     res.json({ code: 0, data: results, message: '成功' });
   } catch (err) {
-    console.error('[video/notify]', err.stack || err.message || err);
-    res.status(500).json({ code: 50000, message: '处理回调失败' });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : '';
+    console.error('[video/notify] 异常:', errMsg, '\n', errStack.substring(0, 500));
+    try {
+      res.status(500).json({ code: 50000, message: '处理回调失败: ' + errMsg });
+    } catch (jsonErr) {
+      console.error('[video/notify] json写入失败:', jsonErr.message);
+      res.status(500).end();
+    }
   }
 });
 

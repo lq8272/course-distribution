@@ -17,6 +17,24 @@
 const qiniu = require('qiniu');
 const crypto = require('crypto');
 
+// ==================== m3u8 签名缓存（5分钟TTL）====================
+const m3u8Cache = new Map();
+const M3U8_CACHE_TTL = 300 * 1000; // 5分钟
+
+function getCachedM3u8(key) {
+  const entry = m3u8Cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > M3U8_CACHE_TTL) {
+    m3u8Cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedM3u8(key, data) {
+  m3u8Cache.set(key, { data, ts: Date.now() });
+}
+
 // ==================== 配置 ====================
 // 七牛云账号 → https://portal.qiniu.com/user/key
 const ACCESS_KEY = process.env.QINIU_ACCESS_KEY || '';
@@ -181,6 +199,13 @@ async function getSignedHlsPlaylist(m3u8Key) {
   if (!isConfigured()) {
     throw new Error('七牛云未配置');
   }
+
+  // 缓存命中直接返回
+  const cached = getCachedM3u8(m3u8Key);
+  if (cached) {
+    return cached;
+  }
+
   // 拉取原始 m3u8 使用视频域名
   const domainRaw = VIDEO_DOMAIN;
   const domain = domainRaw.startsWith('http') ? domainRaw : 'https://' + domainRaw;
@@ -196,7 +221,11 @@ async function getSignedHlsPlaylist(m3u8Key) {
 
   // 签名所有 .ts 分片路径
   const signedM3u8 = signHlsContent(hlsContent);
-  return { signedM3u8, contentType };
+  const result = { signedM3u8, contentType };
+
+  // 写入缓存
+  setCachedM3u8(m3u8Key, result);
+  return result;
 }
 
 // ==================== 回调通知处理 ====================
@@ -273,11 +302,17 @@ async function triggerPfop(courseId, mp4Key, callbackUrl) {
   config.zone = getZone();
   const oper = new qiniu.fop.OperationManager(mac, config);
 
+  // 生成输出 key：videos/course_{id}_{timestamp}.m3u8
+  const mp4Ext = mp4Key.match(/\.(\w+)$/)?.[0] || '.mp4';
+  const outputKey = mp4Key.replace(/\.\w+$/, '.m3u8');
+  const saveas = qiniu.util.urlsafeBase64Encode(BUCKET_VIDEO + ':' + outputKey);
+  const fopCmd = 'avthumb/m3u8/segtime/10|saveas/' + saveas;
+
   return new Promise((resolve, reject) => {
     oper.pfop(
       BUCKET_VIDEO,    // bucket
       mp4Key,          // key（原始MP4）
-      ['avthumb/m3u8/segtime/10'],  // 转HLS，10秒切片
+      [fopCmd],        // 转HLS并保存到 outputKey
       null,            // pipeline（null=默认公共队列）
       { notifyURL: callbackUrl },
       (err, respBody, respInfo) => {
