@@ -18,7 +18,24 @@ function directRequest(url, options = {}) {
       responseType: options.responseType || 'text',
       success: (res) => {
         if (res.statusCode === 200) {
-          resolve(res.data);
+          // 强制转 string：uni.request 对非 JSON Content-Type 可能返回 ArrayBuffer 或对象
+          let text;
+          if (typeof res.data === 'string') {
+            text = res.data;
+          } else if (res.data instanceof ArrayBuffer || (typeof res.data === 'object' && res.data && res.data.type === 'ArrayBuffer')) {
+            // ArrayBuffer 需要用 TextDecoder 解码
+            try {
+              const decoder = new TextDecoder('utf-8');
+              text = decoder.decode(res.data);
+            } catch (e) {
+              text = '';
+            }
+          } else if (typeof res.data === 'object' && res.data !== null) {
+            text = JSON.stringify(res.data);
+          } else {
+            text = String(res.data);
+          }
+          resolve(text);
         } else if (res.statusCode === 401) {
           uni.removeStorageSync('token');
           uni.showToast({ title: '请重新登录', icon: 'none' });
@@ -43,30 +60,34 @@ export const videoApi = {
    *
    * 逻辑：
    * 1. 后端判断 key 是否 .m3u8 结尾
-   *    - .m3u8：后端返回纯文本 m3u8 内容（signedM3u8），前端直接当 src 使用
+   *    - .m3u8：后端返回纯文本 m3u8 内容（signedM3u8）
    *    - 普通视频：后端返回 { code: 0, data: { url: '...' } }，前端取 .url
-   * 2. 由于 .m3u8 是 text/plain，所以不走 api.get() 的 JSON 解析逻辑
+   * 2. 返回值直接作为 video src
+   *    - .m3u8：返回接口 URL，让视频组件自己请求 m3u8 并解析 .ts 分片
+   *    - 普通视频：返回后端签名的 URL
    *
    * @param {string} key - 七牛存储的 video_key（不含域名）
    * @returns {Promise<string>} 签名后的播放 URL（可直接用于 video src）
    */
   playUrl: async (key) => {
+    // 先请求接口，根据 Content-Type 判断类型
     const data = await directRequest(
       `/video/play-url/${encodeURIComponent(key)}`,
       { responseType: 'text' }
     );
-    // 后端对 .m3u8 返回纯文本（m3u8 内容），对普通视频返回 JSON { code, data: { url } }
-    // responseType='text' 时 JSON 响应变成 string，需要手动 parse
+    // 尝试解析为 JSON（普通视频返回 { code: 0, data: { url } }）
     let parsed = data;
     if (typeof data === 'string') {
       try { parsed = JSON.parse(data); } catch { /* 纯文本 m3u8 内容 */ }
     }
+    // 普通视频：直接返回签名 URL
     if (parsed && parsed.code === 0 && parsed.data && parsed.data.url) {
       return parsed.data.url;
     }
-    // 纯文本（m3u8 内容或普通视频 URL）直接作为 video src
-    if (typeof data === 'string' && (data.includes('m3u8') || data.includes('.mp4') || data.includes('.mov') || data.includes('.avi') || data.startsWith('http') || data.startsWith('/'))) {
-      return data;
+    // .m3u8：返回接口 URL，让视频组件自己请求 m3u8 内容
+    // 视频组件用 URL 作为 src 时，自己会请求 m3u8 并正确解析相对 .ts 路径
+    if (typeof data === 'string' && data.includes('#EXTM3U')) {
+      return BASE_URL + `/video/play-url/${encodeURIComponent(key)}`;
     }
     throw new Error(parsed?.message || '获取视频URL失败');
   },

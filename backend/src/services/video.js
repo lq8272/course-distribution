@@ -169,22 +169,56 @@ function createSignedUrlSync(key, expires = SIGNED_URL_EXPIRE) {
  * @param {number} expires - 签名有效期（秒），默认3600
  * @returns {string} 签名后的 m3u8 内容
  */
-function signHlsContent(hlsContent, expires = SIGNED_URL_EXPIRE) {
-  if (!isConfigured()) return hlsContent;
-  const deadline = Math.floor(Date.now() / 1000) + expires;
-  // HLS 分片统一使用视频域名
-  const domainRaw = VIDEO_DOMAIN;
-  const domain = domainRaw.startsWith('http') ? domainRaw : 'https://' + domainRaw;
+/**
+ *
+ * 不在 m3u8 里嵌入带签名的绝对 URL，而是：
+ * 1. 把 .ts 分片路径改成 /api/video/ts/{encoded_path} 形式（相对路径）
+ * 2. 播放器请求 .ts 时走后端 /api/video/ts 接口
+ * 3. 后端实时生成新签名，转发到七牛 —— 每次请求都是"此刻的签名"，永不过期
+ *
+ * @param {string} hlsContent - 原始 m3u8 文本
+ * @returns {string} 签名后的 m3u8 文本
+ */
+/**
+ * 为 HLS 播放列表签名（代理方案）
+ *
+ * 不在 m3u8 里嵌入带签名的绝对 URL，而是：
+ * 1. 把 .ts 分片路径改成 /api/v1/video/ts/{encoded_path} 形式（绝对路径）
+ * 2. 播放器请求 .ts 时走后端 /api/v1/video/ts 接口
+ * 3. 后端实时生成新签名，转发到七牛 —— 每次请求都是"此刻的签名"，永不过期
+ *
+ * @param {string} hlsContent - 原始 m3u8 文本
+ * @returns {string} 签名后的 m3u8 文本
+ */
+function signHlsContent(hlsContent) {
+  // 提取视频域名的基础路径，用于去掉 .ts 路径中的域名部分
+  // 例如 VIDEO_DOMAIN = 'videos.hhlfedu.com' 或 'https://videos.hhlfedu.com'
+  const domainForStrip = VIDEO_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  // 代理接口的绝对路径（路由挂载在 /api/v1/video）
+  const TS_PROXY_PATH = '/api/v1/video/ts/';
 
-  // 匹配所有 .ts 分片路径（支持不同目录层级）
-  return hlsContent.replace(/^(.+?\.(?:ts|key))(.*)$/gm, (match, tsPath, querySuffix) => {
-    // 移除已有的查询参数（防止双重签名）
-    const cleanPath = tsPath.split('?')[0];
-    const signedPath = '/' + cleanPath + '?d=' + deadline;
-    const hmac = crypto.createHmac('sha1', SECRET_KEY);
-    hmac.update(signedPath);
-    const encoded = qiniu.util.urlsafeBase64Encode(hmac.digest('base64'));
-    return domain + cleanPath + '?e=' + deadline + '&token=' + ACCESS_KEY + ':' + encoded;
+  // 正则匹配 .ts/.key 路径：
+  // - 有目录的路径如 videos/seg0.ts  -> 匹配前面的目录+文件名
+  // - 裸文件名如 seg0.ts            -> 匹配整个文件名
+  // - 带域名的如 https://.../seg0.ts -> 匹配到 .ts 为止
+  const TS_PATTERN = /^(.+?\.(?:ts|key)|\.?(?:ts|key))(.*)$/gm;
+
+  return hlsContent.replace(TS_PATTERN, (match, tsPath) => {
+    // 取干净路径，去掉 query string
+    let cleanPath = tsPath.split('?')[0];
+
+    // 去掉域名部分（支持 https://domain.com/ 和 domain.com/ 两种形式）
+    if (cleanPath.includes(domainForStrip)) {
+      cleanPath = cleanPath.substring(cleanPath.indexOf(domainForStrip) + domainForStrip.length);
+    }
+    // 去掉开头的 /
+    cleanPath = cleanPath.replace(/^\/+/, '');
+
+    // URL-encode 路径中的关键字符，但保留 /
+    const encodedKey = encodeURIComponent(cleanPath).replace(/%2F/g, '/');
+
+    // 返回代理路径，播放器用绝对路径请求
+    return TS_PROXY_PATH + encodedKey;
   });
 }
 
@@ -306,7 +340,7 @@ async function triggerPfop(courseId, mp4Key, callbackUrl) {
   const mp4Ext = mp4Key.match(/\.(\w+)$/)?.[0] || '.mp4';
   const outputKey = mp4Key.replace(/\.\w+$/, '.m3u8');
   const saveas = qiniu.util.urlsafeBase64Encode(BUCKET_VIDEO + ':' + outputKey);
-  const fopCmd = 'avthumb/m3u8/segtime/10|saveas/' + saveas;
+  const fopCmd = 'avthumb/m3u8/avcodec/h264/acodec/aac/segtime/10|saveas/' + saveas;
 
   return new Promise((resolve, reject) => {
     oper.pfop(

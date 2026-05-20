@@ -8,6 +8,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const { Readable } = require('stream');
 const router = express.Router();
 const { auth, adminAuth } = require('../middleware/auth');
 const videoService = require('../services/video');
@@ -145,7 +146,7 @@ router.post('/uploaded', auth, adminAuth, async (req, res) => {
     // 3. 更新课程状态为"转码中"
     await db.execute(
       'UPDATE courses SET video_key = ?, video_status = ?, updated_at = NOW() WHERE id = ?',
-      [mp4_key, 'transcoding', courseId]
+      [mp4_key, 1, courseId]
     );
 
     res.json({
@@ -248,6 +249,40 @@ router.get('/cdn-url/:key(*)', async (req, res) => {
   }
 });
 
+// ==================== HLS .ts 分片代理 ====================
+// GET /api/video/ts/:key
+// 播放器请求 .ts 分片时走此代理接口
+// 后端实时生成新签名并转发到七牛，解决 m3u8 缓存后签名过期的问题
+router.get('/ts/:key(*)', async (req, res) => {
+  try {
+    // 去掉前导 /，privateDownloadUrl 不接受以 / 开头的 key
+    const key = decodeURIComponent(req.params.key).replace(/^\/+/, '');
+    if (!key) {
+      return res.status(400).json({ code: 40000, message: '缺少ts路径' });
+    }
+
+    // 私有bucket必须用签名URL，否则返回403
+    // ts key 来自 m3u8 中的相对路径（如 ts/Ee6W52.../xxx/000000.ts），需加 videos/ 前缀才能正确路由到视频 bucket
+    const signedUrl = videoService.createSignedUrlSync('videos/' + key);
+
+    // 代理请求到七牛，StreamingResponse
+    const response = await fetch(signedUrl);
+    if (!response.ok) {
+      console.error('[video/ts] 七牛请求失败:', response.status, key);
+      return res.status(response.status).json({ code: response.status, message: '获取视频分片失败' });
+    }
+
+    // 将七牛的响应流式转发给播放器（fromWeb 转换 Web Stream → Node Stream）
+    res.set('Content-Type', 'video/mp2t');
+    res.set('Cache-Control', 'no-cache, no-store');
+    res.set('Access-Control-Allow-Origin', '*');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (err) {
+    console.error('[video/ts]', err.message);
+    res.status(500).json({ code: 50000, message: '获取视频分片失败' });
+  }
+});
+
 // ==================== 转码完成回调 ====================
 // POST /api/video/notify
 // 七牛云视频转码完成后回调此接口，更新课程视频地址
@@ -274,22 +309,22 @@ router.post('/notify', async (req, res) => {
 
     // 解析七牛回调 body（可能为 object 或 string）
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const events = body.events;
-    const items = body.items;
 
-    // 验证是否是转码完成事件（兼容中英文事件名）
-    const isTranscoded = events && (
-      (Array.isArray(events) && events.some(e => typeof e === 'string' && (
-        e.includes('TranscodeFinished') || e.includes('fop_done') || e.includes('workflow_finished') || e.includes('转码完成')
-      ))) ||
-      (typeof events === 'string' && (
-        events.includes('TranscodeFinished') || events.includes('fop_done') || events.includes('workflow_finished') || events.includes('转码完成')
-      ))
-    );
+    // PFOP 转码回调 body 结构：
+    // { id: persistentId, code: 0, items: [{ code, key, description, persistentId }] }
+    // items[].code === 0 表示转码成功
+    const items = body.items;
+    const pfopCode = body.code;
+
+    // 判断转码成功：PFOP 回调中 code=0 表示整个任务成功
+    // 或者 items 里每个 item.code === 0
+    const isTranscoded = (pfopCode === 0) || (Array.isArray(items) && items.length > 0 && items.some(i => i.code === 0));
+
     if (!isTranscoded) {
-      const evStr = events === undefined ? 'undefined' : JSON.stringify(events);
-      console.log('[video/notify] 忽略非转码事件, events=', evStr ? evStr.substring(0, 200) : events);
-      return res.json({ code: 0, data: null, message: '忽略非转码事件' });
+      const codeStr = pfopCode === undefined ? 'undefined' : String(pfopCode);
+      const itemsStr = items === undefined ? 'undefined' : JSON.stringify(items).substring(0, 200);
+      console.log('[video/notify] 非转码成功事件, pfopCode=', codeStr, 'items=', itemsStr);
+      return res.json({ code: 0, data: null, message: '非转码成功事件' });
     }
 
     if (!items || items.length === 0) {
@@ -305,43 +340,34 @@ router.post('/notify', async (req, res) => {
     } catch (redisErr) {
       console.error('[video/notify] Redis get错误:', redisErr.message);
     }
+    // PFOP 回调：persistentId 在 body.id，不在 item.persistentId
+    const pfopPersistentId = body.id;
     const results = [];
     for (const item of items) {
-      const { code, description, key, persistentId } = item;
+      const { code, description, key } = item;
 
       if (code !== 0) {
         console.error('[video/notify] 转码失败:', description);
-        // 转码失败，更新状态
-        if (persistentId) {
-          const mappingStr = await redis.get(`video_pfop:${persistentId}`);
-          if (mappingStr) {
-            const { courseId } = JSON.parse(mappingStr);
-            await db.execute(
-              'UPDATE courses SET video_status = ?, updated_at = NOW() WHERE id = ?',
-              ['failed', courseId]
-            );
-          }
-        }
         results.push({ key, success: false, error: description });
         continue;
       }
 
-      // 幂等检查
-      if (persistentId) {
-        const idempotentKey = `video_notify:${persistentId}`;
+      // 幂等检查（用 body.id 作为 persistentId）
+      if (pfopPersistentId) {
+        const idempotentKey = `video_notify:${pfopPersistentId}`;
         const already = await redis.get(idempotentKey);
         if (already) {
-          console.log(`[video/notify] 重复回调忽略 persistentId=${persistentId}`);
+          console.log(`[video/notify] 重复回调忽略 persistentId=${pfopPersistentId}`);
           results.push({ key, success: true, duplicate: true });
           continue;
         }
         await redis.set(idempotentKey, '1', 'EX', 86400);
       }
 
-      // 从 Redis 取 courseId（由 /uploaded 接口写入）
+      // 从 Redis 取 courseId（由 /uploaded 接口写入，key = video_pfop:persistentId）
       let courseId = null;
-      if (persistentId) {
-        const mappingStr = await redis.get(`video_pfop:${persistentId}`);
+      if (pfopPersistentId) {
+        const mappingStr = await redis.get(`video_pfop:${pfopPersistentId}`);
         if (mappingStr && mappingStr !== 'null') {
           try {
             const mapping = JSON.parse(mappingStr);
@@ -350,13 +376,13 @@ router.post('/notify', async (req, res) => {
             courseId = null;
           }
           // 清理映射
-          await redis.del(`video_pfop:${persistentId}`);
+          await redis.del(`video_pfop:${pfopPersistentId}`);
         }
       }
 
       // 兜底：从 key 匹配 course_id（m3u8 key 格式不固定，跳过此方式）
       if (!courseId) {
-        console.error('[video/notify] 无法获取 courseId，Redis 无映射 persistentId=', persistentId);
+        console.error('[video/notify] 无法获取 courseId，Redis 无映射 persistentId=', pfopPersistentId);
         results.push({ key, success: false, error: 'courseId未找到' });
         continue;
       }

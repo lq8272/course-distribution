@@ -18,6 +18,7 @@ router.post('/login', async (req, res) => {
 
     // 调用微信接口换取 openid
     let openid;
+    console.error('[auth/login] 收到登录请求 code:', code, 'appid:', config.wechat.appid);
     if (code && code.startsWith('test_')) {
       // 测试模式：code 格式为 test_<openid>
       openid = code;
@@ -25,12 +26,12 @@ router.post('/login', async (req, res) => {
       // 正式：微信 code2session 接口
       const appid = config.wechat.appid;
       const secret = config.wechat.secret;
-      const wxRes = await fetch(
-        `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${code}&grant_type=authorization_code`
-      );
+      const wxUrl = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${code}&grant_type=authorization_code`;
+      console.error('[auth/login] 微信接口请求 URL:', wxUrl);
+      const wxRes = await fetch(wxUrl);
       const wxData = await wxRes.json();
+      console.error('[auth/login] 微信接口返回:', wxData);
       if (!wxData.openid) {
-        console.error('[auth/login] 微信接口返回错误:', wxData);
         return fail(res, 400, 40001, '微信登录失败，请稍后重试');
       }
       openid = wxData.openid;
