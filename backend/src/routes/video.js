@@ -399,7 +399,7 @@ router.post('/notify', async (req, res) => {
       // 更新数据库：video_url 存 m3u8 key，状态设为已就绪
       await db.execute(
         'UPDATE courses SET video_url = ?, video_status = ?, updated_at = NOW() WHERE id = ?',
-        [key, 'ready', courseId]
+        [key, 2, courseId]
       );
 
       results.push({ courseId, key, success: true });
@@ -431,7 +431,7 @@ router.delete('/:key(*)', auth, async (req, res) => {
     const result = await videoService.deleteFile(key);
     await db.execute(
       'UPDATE courses SET video_key = NULL, video_url = NULL, video_status = ?, updated_at = NOW() WHERE video_key = ? OR video_url = ?',
-      ['none', key, key]
+      [0, key, key]
     );
     res.json({ code: 0, data: result, message: '删除完成' });
   } catch (err) {
