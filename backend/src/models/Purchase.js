@@ -99,8 +99,10 @@ const Purchase = {
           if (rewardValue > 0) {
             // dr_dr / mxj_dr / cjhh_dr 为百分比（存的是30/50/70），其余为固定金额
             const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+            // 达人申请费 ¥4,980 作为百分比基数
+            const DR_APPLY_FEE = 4980;
             const amount = isPercent
-              ? Math.round(parseFloat(record.total_amount) * rewardValue / 100 * 100) / 100
+              ? Math.round(DR_APPLY_FEE * rewardValue / 100 * 100) / 100
               : rewardValue;
             await conn.execute(
               `INSERT INTO commissions (user_id, order_id, type, level, amount, status, remark)

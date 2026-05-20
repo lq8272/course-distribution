@@ -146,8 +146,9 @@ const Commission = {
         const referralReward = parseFloat(cfg[0]?.value || 0);
         if (referralReward > 0) {
           const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+          const DR_APPLY_FEE = 4980;
           const amount = isPercent
-            ? Math.round(price * referralReward / 100 * 100) / 100
+            ? Math.round(DR_APPLY_FEE * referralReward / 100 * 100) / 100
             : referralReward;
           await conn.execute(
             `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
@@ -360,8 +361,9 @@ const Commission = {
         const referralReward = parseFloat(cfg[0]?.value || 0);
         if (referralReward > 0) {
           const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+          const DR_APPLY_FEE = 4980;
           const amount = isPercent
-            ? Math.round(price * referralReward / 100 * 100) / 100
+            ? Math.round(DR_APPLY_FEE * referralReward / 100 * 100) / 100
             : referralReward;
           await conn.execute(
             `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
