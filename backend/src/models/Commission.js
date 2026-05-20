@@ -130,19 +130,14 @@ const Commission = {
         }
       }
 
-      // 6. 推荐奖励：direct_agent_id 对应的直推分销商获得固定金额奖励
-      //    奖励规则根据（推荐人等级, 购买人身份）查 configs
-      //    - 达人推荐达人购买：referral_reward_dr_dr = 0（已达人已通过SALES获得30%）
-      //    - 达人推荐梦想家/超级合伙人购买：referral_reward_dr_mxj / _cjhh = 3000
-      //    - 梦想家推荐达人购买：referral_reward_mxj_dr = 5000
-      //    - 以此类推，共9种组合
+      // 6. 推荐奖励：direct_agent_id 对应的直推分销商获得奖励
+      //    dr_dr / mxj_dr / cjhh_dr 为百分比（30/50/70），其余为固定金额
       if (agentsChain.L1) {
-        // 判断购买人身份（是否本身是分销商）
         const [buyerAgent] = await conn.query(
           'SELECT level FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
           [o.user_id]
         );
-        const buyerLevel = buyerAgent.length ? buyerAgent[0].level : 'DR'; // 默认为DR（普通用户）
+        const buyerLevel = buyerAgent.length ? buyerAgent[0].level : 'DR';
         const cfgKey = `referral_reward_${agentsChain.L1.level.toLowerCase()}_${buyerLevel.toLowerCase()}`;
         const [cfg] = await conn.query(
           "SELECT value FROM configs WHERE `key` = ? LIMIT 1",
@@ -150,10 +145,14 @@ const Commission = {
         );
         const referralReward = parseFloat(cfg[0]?.value || 0);
         if (referralReward > 0) {
+          const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+          const amount = isPercent
+            ? Math.round(price * referralReward / 100 * 100) / 100
+            : referralReward;
           await conn.execute(
             `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
              VALUES (?, ?, 1, 'REFERRAL', ?, 1, NOW())`,
-            [agentsChain.L1.user_id, orderId, referralReward]
+            [agentsChain.L1.user_id, orderId, amount]
           );
         }
       }
@@ -360,10 +359,14 @@ const Commission = {
         );
         const referralReward = parseFloat(cfg[0]?.value || 0);
         if (referralReward > 0) {
+          const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+          const amount = isPercent
+            ? Math.round(price * referralReward / 100 * 100) / 100
+            : referralReward;
           await conn.execute(
             `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
              VALUES (?, ?, 1, 'REFERRAL', ?, 1, NOW())`,
-            [chain.L1.user_id, o.id, referralReward]
+            [chain.L1.user_id, o.id, amount]
           );
         }
       }

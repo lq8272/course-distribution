@@ -97,10 +97,15 @@ const Purchase = {
           );
           const rewardValue = parseFloat(cfgRow?.value || 0);
           if (rewardValue > 0) {
+            // dr_dr / mxj_dr / cjhh_dr 为百分比（存的是30/50/70），其余为固定金额
+            const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
+            const amount = isPercent
+              ? Math.round(parseFloat(record.total_amount) * rewardValue / 100 * 100) / 100
+              : rewardValue;
             await conn.execute(
               `INSERT INTO commissions (user_id, order_id, type, level, amount, status, remark)
                VALUES (?, ?, 'purchase_commission', ?, ?, 1, '拿货佣金')`,
-              [buyer.recommender_id, record.id, buyer.level, rewardValue]
+              [buyer.recommender_id, record.id, buyer.level, amount]
             );
           }
         }
