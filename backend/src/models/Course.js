@@ -114,7 +114,7 @@ const Course = {
   async create(data) {
     const { title, description, cover_image, video_url, video_key, price, is_free, category_id, sort } = data;
     const r = await db.execute(
-      'INSERT INTO courses (title, description, cover_image, video_url, video_key, price, is_free, category_id, sort) VALUES (?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO courses (title, description, cover_image, video_url, video_key, price, is_free, category_id, sort, is_distribution, is_hot, hot_commission_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       [
         title ?? '',
         description ?? '',
@@ -125,6 +125,9 @@ const Course = {
         is_free ? 1 : 0,
         category_id ?? null,
         sort ?? 0,
+        (is_distribution || is_hot) ? 1 : 0,  // 爆款课天然分销
+        is_hot ? 1 : 0,
+        is_hot ? (hot_commission_rate ?? 0) : 0,
       ]
     );
     return r.insertId;
@@ -133,9 +136,11 @@ const Course = {
   async update(id, data) {
     const fields = [];
     const vals = [];
-    ['title','description','cover_image','video_url','video_key','price','is_free','category_id','sort','is_show'].forEach(k => {
+    ['title','description','cover_image','video_url','video_key','price','is_free','category_id','sort','is_show','is_distribution','is_hot','hot_commission_rate'].forEach(k => {
       if (data[k] !== undefined) { fields.push(`${k} = ?`); vals.push(data[k]); }
     });
+    // 爆款课强制 is_distribution = 1
+    if (data.is_hot) { fields.push('is_distribution = 1'); }
     if (!fields.length) return;
     vals.push(id);
     return db.execute(`UPDATE courses SET ${fields.join(',')} WHERE id = ?`, vals);

@@ -54,7 +54,11 @@ const Commission = {
       const o = order[0];
 
       // 2. 读取课程价格
-      const [course] = await conn.query('SELECT price FROM courses WHERE id = ?', [o.course_id]);
+      // 2. 读取课程价格 + 爆款课标识
+      const [course] = await conn.query(
+        'SELECT price, is_hot, hot_commission_rate FROM courses WHERE id = ?',
+        [o.course_id]
+      );
       if (!course.length) {
         if (!existingConn) { await conn.rollback(); conn.release(); }
         return [];
@@ -74,7 +78,30 @@ const Commission = {
         throw e;
       }
 
-      // 4. 读取各级分销商的 rebate_rate（从 agent_levels 表动态获取）
+      // 4. 爆款课程：独立佣金体系，单层直推，不追溯上级
+      if (course[0].is_hot === 1) {
+        const hotRate = parseFloat(course[0].hot_commission_rate) || 0;
+        if (hotRate > 0 && agentsChain.L1) {
+          const amount = Math.round(price * hotRate / 100 * 100) / 100;
+          if (amount > 0) {
+            await conn.execute(
+              `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+               VALUES (?, ?, 1, 'HOT_SALES', ?, 1, NOW())`,
+              [agentsChain.L1.user_id, orderId, amount]
+            );
+          }
+        }
+        // 爆款课无推荐奖励，跳过普通推荐奖励逻辑
+        await conn.execute(
+          'UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id = ?',
+          [orderId]
+        );
+        if (shouldCommit) await conn.commit();
+        if (shouldRelease) conn.release();
+        return [{ userId: agentsChain.L1?.user_id, level: 1, amount: amount || 0 }];
+      }
+
+      // 5. 读取各级分销商的 rebate_rate（从 agent_levels 表动态获取）
       const levelRates = { DR: 0, MXJ: 0, CJHH: 0 };
       const [rateRows] = await conn.query(
         "SELECT level, rebate_rate FROM agent_levels WHERE level IN ('DR','DISTRIBUTORDR','MXJ','DISTRIBUTORMXJ','CJHH','DISTRIBUTORCJHH')"
@@ -83,7 +110,7 @@ const Commission = {
 
       const settlements = [];
 
-      // 5. 计算并写入每层佣金（SALES 类型）— 差额返佣模式
+      // 6. 计算并写入每层佣金（SALES 类型）— 差额返佣模式
       //    L1 达人：拿自己等级对应 rebate_rate × 课程价格
       //    L2 梦想家：拿 (L2_rate - L1_rate) × 课程价格，仅当差值为正
       //    L3 超合伙：拿 (L3_rate - L2_rate) × 课程价格，仅当差值为正
@@ -270,7 +297,7 @@ const Commission = {
     // 1. 批量幂等检查 + 读取订单/课程信息（单次 JOIN）
     const [orders] = await conn.query(
       `SELECT o.id, o.user_id, o.course_id, o.direct_agent_id, o.status, o.commission_settled,
-              c.price
+              c.price, c.is_hot, c.hot_commission_rate
        FROM orders o
        JOIN courses c ON c.id = o.course_id
        WHERE o.id IN (${orderIds.map(() => '?').join(',')})
@@ -307,6 +334,23 @@ const Commission = {
     for (const o of orders) {
       const chain = buildAgentChain(agentMap, o.direct_agent_id);
       const price = parseFloat(o.price);
+
+      // 爆款课程：独立佣金体系，单层直推，type=HOT_SALES
+      if (o.is_hot === 1) {
+        const hotRate = parseFloat(o.hot_commission_rate) || 0;
+        if (hotRate > 0 && chain.L1) {
+          const amount = Math.round(price * hotRate / 100 * 100) / 100;
+          if (amount > 0) {
+            await conn.execute(
+              `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
+               VALUES (?, ?, 1, 'HOT_SALES', ?, 1, NOW())`,
+              [chain.L1.user_id, o.id, amount]
+            );
+            settlements.push({ userId: chain.L1.user_id, orderId: o.id, level: 1, amount });
+          }
+        }
+        continue; // 爆款课不参与普通佣金计算
+      }
 
       // L1
       if (chain.L1) {

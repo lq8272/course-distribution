@@ -38,7 +38,7 @@ router.get('/list', async (req, res) => {
 // POST /api/admin/course/create
 router.post('/create', async (req, res) => {
   try {
-    const { title, description, cover_image, video_key, price, is_free, category_id, sort, is_distribution, commission_ratio } = req.body;
+    const { title, description, cover_image, video_key, price, is_free, category_id, sort, is_distribution, commission_ratio, is_hot, hot_commission_rate } = req.body;
     if (!title) return fail(res, 400, 40000, '课程标题不能为空');
     if (title.length > 200) return fail(res, 400, 40002, '课程标题不能超过200字符');
     if (price !== undefined && price !== null && (isNaN(Number(price)) || Number(price) < 0)) {
@@ -49,13 +49,15 @@ router.post('/create', async (req, res) => {
       title,
       description,
       cover_image,
-      video_key,      // 存七牛 key，前端用 play-url 接口拿签名播放地址
+      video_key,
       price: price || 0,
       is_free: is_free ? 1 : 0,
       category_id,
       sort: sort || 0,
       is_distribution: is_distribution ? 1 : 0,
       commission_ratio: commission_ratio || 0,
+      is_hot: is_hot ? 1 : 0,
+      hot_commission_rate: is_hot ? (hot_commission_rate || 0) : 0,
     });
     ok(res, { id });
   } catch (err) {
