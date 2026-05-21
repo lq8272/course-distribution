@@ -1,15 +1,34 @@
 // 小鹅通风格基础样式
 $primary-color: #FF6B00;
 $secondary-color: #FF8533;
+$primary: #FF6B00;
+$success: #07c160;
+$warning: #ffb800;
+$danger: #ee0a24;
 $text-primary: #333333;
 $text-secondary: #666666;
 $text-gray: #999999;
+$text-xs: 20rpx;
+$text-base: 28rpx;
+$text-sm: 24rpx;
+$text-lg: 32rpx;
+$text-xl: 36rpx;
+$text-muted: #999999;
 $bg-light: #F5F5F5;
 $bg-white: #FFFFFF;
+$bg-base: #F5F5F5;
+$bg-card: #FFFFFF;
 $border-color: #EEEEEE;
+$space-sm: 16rpx;
+$space-md: 24rpx;
+$space-lg: 32rpx;
+$space-xl: 48rpx;
 $shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 $shadow-md: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+$shadow-card: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
 $border-radius: 16rpx;
+$radius-md: 12rpx;
+$radius-xl: 24rpx;
 
 // 通用卡片样式
 .card {

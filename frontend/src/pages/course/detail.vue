@@ -244,6 +244,7 @@ async function loadCourse(id) {
     // 已购/免费用户：自动加载签名视频 URL
     if (course.value.video_key && canWatchFull.value) {
       signedVideoSrc.value = await videoApi.playUrl(course.value.video_key);
+      videoLoading.value = false; // video组件显示自带loading，自定义spinner立即隐藏
     }
   } catch (e) {
     console.error('loadCourse error', e);
@@ -269,6 +270,7 @@ async function handleTrialPlay() {
   trialEnded.value = false;
   trialCountdown.value = TRIAL_SECONDS;
   try {
+    videoLoading.value = false; // 先清自定义loading，再赋值URL（video组件自带loading会接管）
     signedVideoSrc.value = await videoApi.playUrl(course.value.video_key);
     // 等待 video 组件渲染后创建上下文
     setTimeout(() => {

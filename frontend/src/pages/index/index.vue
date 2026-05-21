@@ -80,7 +80,10 @@
           <!-- 封面 -->
           <view class="card-cover">
             <image class="cover-img" :src="course.cover_image_signed_url || course.cover_image || course.cover || '/static/course-placeholder.png'" mode="aspectFill" />
-            <view class="cover-tag" v-if="course.is_distribution">
+            <view class="cover-tag" v-if="course.is_hot">
+              <text class="cover-tag-text">🔥 爆款</text>
+            </view>
+            <view class="cover-tag" v-else-if="course.is_distribution">
               <text class="cover-tag-text">分销</text>
             </view>
           </view>
@@ -140,7 +143,11 @@ const filteredCourses = computed(() => {
 });
 
 function calcCommission(course) {
-  if (!course.commission_ratio || !course.price) return '0.00';
+  if (!course.price) return '0.00';
+  if (course.is_hot && course.hot_commission_rate) {
+    return (course.price * (parseFloat(course.hot_commission_rate) / 100)).toFixed(2);
+  }
+  if (!course.commission_ratio) return '0.00';
   return (course.price * (course.commission_ratio / 100)).toFixed(2);
 }
 

@@ -11,7 +11,7 @@ export default defineConfig({
     port: 5173
   },
   build: {
-    emptyOutDir: false,
+    emptyOutDir: true,
   },
   resolve: {
     alias: {

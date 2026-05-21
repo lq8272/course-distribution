@@ -259,6 +259,7 @@
             </view>
             <view class="course-admin-tags">
               <text :class="['tag-pill', c.is_distribution ? 'tag-on' : 'tag-off']">{{ c.is_distribution ? '✅ 分销' : '❌ 普通' }}</text>
+              <text v-if="c.is_hot" class="tag-pill tag-hot">🔥 爆款</text>
               <text :class="['tag-pill', c.is_show ? 'tag-show' : 'tag-hide']">{{ c.is_show ? '🔎 显示' : '🔒 隐藏' }}</text>
             </view>
           </view>
@@ -531,8 +532,23 @@
           <switch :checked="formData.is_distribution === 1" @change="formData.is_distribution = formData.is_distribution ? 0 : 1" />
         </view>
 
-        <!-- 佣金比例 -->
-        <view class="form-item" v-if="formData.is_distribution">
+        <!-- 爆款课程 -->
+        <view class="form-item form-item--row">
+          <view class="form-label">爆款课程</view>
+          <switch :checked="formData.is_hot === 1" @change="formData.is_hot = formData.is_hot ? 0 : 1" />
+        </view>
+
+        <!-- 爆款佣金比例 -->
+        <view class="form-item" v-if="formData.is_hot === 1">
+          <view class="form-label">爆款佣金比例</view>
+          <view class="form-field">
+            <input class="form-input" v-model="formData.hot_commission_rate" type="digit" placeholder="如：30" />
+            <text class="input-suffix">%（结算给直推人）</text>
+          </view>
+        </view>
+
+        <!-- 普通分销佣金比例 -->
+        <view class="form-item" v-if="formData.is_distribution && formData.is_hot !== 1">
           <view class="form-label">一级佣金比例</view>
           <view class="form-field">
             <input class="form-input" v-model="formData.commission_ratio" type="digit" placeholder="如：30" />
@@ -681,6 +697,7 @@ const editingCourse = ref({});
 const formData = ref({
   id: null, title: '', description: '', cover_image: '', video_key: '',
   price: '0.00', is_free: 0, is_distribution: 0, commission_ratio: '30',
+  is_hot: 0, hot_commission_rate: '30',
   category_id: null, sort: 0, rejectReason: '',
 });
 
@@ -898,6 +915,8 @@ function openCourseForm(c) {
       is_free: c.is_free ? 1 : 0,
       is_distribution: c.is_distribution ? 1 : 0,
       commission_ratio: c.commission_ratio || '30',
+      is_hot: c.is_hot ? 1 : 0,
+      hot_commission_rate: c.hot_commission_rate || '30',
       category_id: c.category_id,
       sort: c.sort || 0,
     };
@@ -910,6 +929,7 @@ function openCourseForm(c) {
       id: null, title: '', description: '', cover_image: '', cover_image_display: '',
       video_key: '',
       price: '0.00', is_free: 0, is_distribution: 0, commission_ratio: '30',
+      is_hot: 0, hot_commission_rate: '30',
       category_id: null, sort: 0,
     };
     categoryIndex.value = 0;
@@ -1008,6 +1028,8 @@ async function saveCourse() {
       is_free: formData.value.is_free,
       is_distribution: formData.value.is_distribution,
       commission_ratio: parseFloat(formData.value.commission_ratio) || 0,
+      is_hot: formData.value.is_hot,
+      hot_commission_rate: parseFloat(formData.value.hot_commission_rate) || 0,
       category_id: formData.value.category_id,
       sort: parseInt(formData.value.sort) || 0,
     };
@@ -1522,6 +1544,7 @@ $shadow-card:   0 2rpx 16rpx rgba(0,0,0,0.06), 0 8rpx 32rpx rgba(0,0,0,0.04);
 .tag-off  { color: $text-muted; background: rgba($text-muted,0.1); }
 .tag-show { color: #007aff; background: rgba(0,122,255,0.1); }
 .tag-hide { color: $text-muted; background: rgba($text-muted,0.1); }
+.tag-hot  { color: #ff6034; background: rgba(255,96,52,0.1); }
 .course-admin-price {
   display: flex;
   align-items: baseline;
