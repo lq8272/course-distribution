@@ -167,6 +167,8 @@ app.use('/api/v1/video', videoRoutes);
 app.use('/api/v1/wallet', walletRoutes);
 app.use('/api/v1/feedbacks', feedbackRoutes);
 app.use('/api/v1/admin/feedbacks', adminFeedbackRoutes);
+app.use('/api/v1/agent', require('./routes/agent/auth'));
+app.use('/api/v1/agent', require('./routes/agent/conversations'));
 
 // 404
 app.use((req, res) => {

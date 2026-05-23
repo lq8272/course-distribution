@@ -349,7 +349,44 @@ CREATE TABLE feedbacks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户意见反馈表';
 
 -- ============================================================
--- 16. configs（全局配置表）
+-- 16. service_agents（客服账号表）
+-- ============================================================
+DROP TABLE IF EXISTS service_agents;
+CREATE TABLE service_agents (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username     VARCHAR(64)   NOT NULL COMMENT '登录账号',
+  password     VARCHAR(255)  NOT NULL COMMENT 'bcrypt加密密码',
+  nickname     VARCHAR(64)   NOT NULL COMMENT '客服昵称/花名',
+  avatar       VARCHAR(512)  DEFAULT NULL COMMENT '头像URL',
+  status       TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1在职 0离职',
+  max_handling INT UNSIGNED NOT NULL DEFAULT 20 COMMENT '最大同时处理会话数',
+  online       TINYINT(1) NOT NULL DEFAULT 0 COMMENT '0离线 1在线',
+  created_at   DATETIME      DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_username (username),
+  INDEX idx_status (status),
+  INDEX idx_online (online)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客服账号表';
+
+-- ============================================================
+-- 16b. service_assignments（会话分配表）
+-- ============================================================
+DROP TABLE IF EXISTS service_assignments;
+CREATE TABLE service_assignments (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  conversation_id BIGINT UNSIGNED NOT NULL COMMENT '会话ID',
+  agent_id        BIGINT UNSIGNED NOT NULL COMMENT '客服ID',
+  assigned_at     DATETIME        DEFAULT CURRENT_TIMESTAMP,
+  assigned_by    BIGINT UNSIGNED DEFAULT NULL COMMENT '分配者ID（系统=0）',
+  INDEX idx_conversation (conversation_id),
+  INDEX idx_agent (agent_id),
+  FOREIGN KEY (conversation_id) REFERENCES customer_services(id) ON DELETE CASCADE,
+  FOREIGN KEY (agent_id) REFERENCES service_agents(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_conversation (conversation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话分配表';
+
+-- ============================================================
+-- 17. configs（全局配置表）
 -- ============================================================
 DROP TABLE IF EXISTS configs;
 CREATE TABLE configs (

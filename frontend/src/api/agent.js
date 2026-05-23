@@ -1,14 +1,17 @@
-import { api } from './index';
+import api from './index.js';
 
 export const agentApi = {
-  my: () => api.get('/agent/my'),
-  apply: (data) => api.post('/agent/apply', data),
-  stats: () => api.get('/agent/stats'),
-  levels: () => api.get('/agent/levels'),
-  team: () => api.get('/agent/team'),
-  withdrawRecord: (params) => api.get('/agent/withdraw', params),
-  // 升级相关
-  upgradeProgress: () => api.get('/agent/upgrade/progress'),
-  upgradeRecords: () => api.get('/agent/upgrade/records'),
-  applyUpgrade: () => api.post('/agent/upgrade/apply'),
+  login: (data) => api.post('/agent/login', data),
+  logout: () => api.post('/agent/logout'),
+  info: () => api.get('/agent/info'),
+
+  // 会话
+  conversations: (params) => api.get('/agent/conversations', { params }),
+  messages: (id, params) => api.get(`/agent/conversations/${id}/messages`, { params }),
+  reply: (id, data) => api.post(`/agent/conversations/${id}/reply`, data),
+  close: (id) => api.put(`/agent/conversations/${id}/close`),
+
+  // 队列
+  queue: () => api.get('/agent/queue'),
+  claim: (id) => api.post(`/agent/queue/${id}/claim`),
 };

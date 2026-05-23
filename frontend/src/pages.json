@@ -14,6 +14,9 @@
     { "path": "pages/admin/config/index", "style": { "navigationBarTitleText": "系统配置", "navigationStyle": "custom" } },
     { "path": "pages/admin/purchase/list", "style": { "navigationBarTitleText": "拿货记录", "navigationStyle": "custom" } },
     { "path": "pages/admin/stats/index", "style": { "navigationBarTitleText": "数据统计", "navigationStyle": "custom" } },
+    { "path": "pages/agent/login/index", "style": { "navigationBarTitleText": "客服登录", "navigationStyle": "custom" } },
+    { "path": "pages/agent/workbench/index", "style": { "navigationBarTitleText": "客服工作台" } },
+    { "path": "pages/agent/chat/index", "style": { "navigationBarTitleText": "会话详情", "navigationStyle": "custom" } },
     { "path": "pages/service/conversations", "style": { "navigationBarTitleText": "客服中心" } },
     { "path": "pages/order/list", "style": { "navigationBarTitleText": "我的订单" } },
     { "path": "pages/order/detail", "style": { "navigationBarTitleText": "订单详情" } },
@@ -49,6 +52,7 @@
       { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
       { "pagePath": "pages/distribute/index", "text": "分销", "iconPath": "static/tabbar/distribute.png", "selectedIconPath": "static/tabbar/distribute-active.png" },
       { "pagePath": "pages/team/index", "text": "团队", "iconPath": "static/tabbar/team.png", "selectedIconPath": "static/tabbar/team-active.png" },
+      { "pagePath": "pages/agent/workbench/index", "text": "客服", "iconPath": "static/tabbar/service.png", "selectedIconPath": "static/tabbar/service-active.png" },
       { "pagePath": "pages/user/index", "text": "我的", "iconPath": "static/tabbar/user.png", "selectedIconPath": "static/tabbar/user-active.png" }
     ]
   }
