@@ -159,16 +159,17 @@ router.post('/messages/:conversationId', auth, adminAuth, async (req, res) => {
     // WebSocket 推送：回复给用户
     const conv = convRows[0];
     notifyUser(conv.user_id, 'admin_reply', {
-      conversationId: parseInt(req.params.conversationId),
-      messageId: insertId,
+      conversation_id: parseInt(req.params.conversationId),
+      id: insertId,
       content,
-      fromAdminNickname: req.user.nickname || '客服',
-      ts: Date.now(),
+      from_admin_nickname: req.user.nickname || '客服',
+      sender_id: req.user.id,
+      created_at: Date.now(),
     });
 
     // WebSocket 推送：通知所有管理员会话列表有更新
     notifyAdmins('conversation_updated', {
-      conversationId: parseInt(req.params.conversationId),
+      conversation_id: parseInt(req.params.conversationId),
       ts: Date.now(),
     });
 

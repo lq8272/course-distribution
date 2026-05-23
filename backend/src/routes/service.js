@@ -221,9 +221,9 @@ router.post('/messages/:conversationId', auth, async (req, res) => {
 
     // WebSocket 推送：通知所有管理员有新用户消息
     notifyAdmins('customer_message', {
-      conversationId: parseInt(req.params.conversationId),
-      senderId: req.user.id,
-      senderNickname: req.user.nickname || '用户',
+      conversation_id: parseInt(req.params.conversationId),
+      sender_id: req.user.id,
+      sender_nickname: req.user.nickname || '用户',
       content: content.slice(0, 100),
       ts: Date.now(),
     });
@@ -262,10 +262,11 @@ router.post('/messages/:conversationId', auth, async (req, res) => {
             // WebSocket 推送：AI 回复给用户
             const conv = convRows[0];
             notifyUser(conv.user_id, 'admin_reply', {
-              conversationId: parseInt(req.params.conversationId),
-              messageId: aiMsgId,
+              conversation_id: parseInt(req.params.conversationId),
+              id: aiMsgId,
               content: reply,
-              ts: Date.now(),
+              sender_id: 0,
+              created_at: Date.now(),
             });
             console.log(`[AI] auto-reply to conversation ${req.params.conversationId}: ${reply.slice(0, 50)}`);
           }

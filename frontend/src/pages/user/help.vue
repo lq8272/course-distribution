@@ -77,6 +77,11 @@
           <text class="value">{{ wechatId }}</text>
           <text class="arrow">›</text>
         </view>
+        <view class="service-item" @click="goMyFeedbacks">
+          <view class="icon-wrap">📝</view>
+          <text class="label">我的反馈</text>
+          <text class="arrow">›</text>
+        </view>
       </view>
     </view>
   </view>
@@ -125,6 +130,10 @@ async function submitFeedback() {
 }
 function contactService() {
   uni.navigateTo({ url: '/pages/service/conversations' });
+}
+
+function goMyFeedbacks() {
+  uni.navigateTo({ url: '/pages/user/feedbacks' });
 }
 
 function copyWechat() {

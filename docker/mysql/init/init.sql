@@ -339,6 +339,7 @@ CREATE TABLE feedbacks (
   status      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '处理状态：0待处理 1处理中 2已处理 3已忽略',
   handler_id  BIGINT UNSIGNED DEFAULT NULL COMMENT '处理人ID',
   reply       TEXT           DEFAULT NULL COMMENT '处理回复',
+  conversation_id BIGINT UNSIGNED DEFAULT NULL COMMENT '关联会话ID',
   created_at  DATETIME       DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_user_id (user_id),
