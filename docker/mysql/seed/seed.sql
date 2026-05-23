@@ -8,9 +8,9 @@ USE course_distribute;
 -- 1. 平台根用户（R4：初始化脚本创建）
 -- 密码: admin123（bcrypt hash，无需转义）
 -- ============================================================
-INSERT INTO users (openid, nickname, admin_password, is_admin, status)
-VALUES ('PLATFORM_ROOT', '平台管理员', '$2a$10$yCr5utOblxZTjP/P9VcG1OH7VKJSCN7mLivW6YyZuTFfFYd.odIRu', 1, 1)
-ON DUPLICATE KEY UPDATE nickname = '平台管理员', admin_password = '$2a$10$yCr5utOblxZTjP/P9VcG1OH7VKJSCN7mLivW6YyZuTFfFYd.odIRu';
+INSERT INTO users (openid, nickname, phone, admin_password, is_admin, status)
+VALUES ('PLATFORM_ROOT', 'admin', '13800138000', '$2a$10$3AC3vi/GWcOPG1Lp2hmRbeZaDfwYacRDFn7UKLky7/6Ds7LUmUhni', 1, 1)
+ON DUPLICATE KEY UPDATE nickname = 'admin', phone = '13800138000', admin_password = '$2a$10$3AC3vi/GWcOPG1Lp2hmRbeZaDfwYacRDFn7UKLky7/6Ds7LUmUhni';
 
 -- ============================================================
 -- 2. 分销等级配置（R1+R4）
@@ -80,20 +80,6 @@ INSERT INTO course_categories (id, name, sort, is_show) VALUES
 ON DUPLICATE KEY UPDATE name = VALUES(name), sort = VALUES(sort);
 
 -- ============================================================
--- 5. 示例课程数据
--- 注意：cover_image 和 video_url 需替换为实际 CDN 地址（https://tdw0wi1vp.hb-bkt.clouddn.com）
--- 为便于演示，使用 picsum.photos 公开占位图（可正常访问）
--- ============================================================
-INSERT INTO courses (category_id, title, description, cover_image, price, is_free, is_show, sort) VALUES
-  (1, '开场：我是如何从"听不懂"到考上清华北大的？',
-      '清华学长亲授学习方法，帮你在短时间内实现成绩飞跃。',
-      'https://picsum.photos/seed/course1/400/225', 499.00, 0, 1, 100),
-  (1, '如何进入"心流"状态？——15分钟专注力训练',
-      '掌握心流心理学原理，15分钟训练提升专注力 10 倍。',
-      'https://picsum.photos/seed/course2/400/225', 499.00, 0, 1, 90)
-ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), cover_image = VALUES(cover_image), price = VALUES(price);
-
--- ============================================================
 -- 6. 管理员角色
 -- ============================================================
 INSERT INTO admin_roles (name, permission, description) VALUES
@@ -101,11 +87,6 @@ INSERT INTO admin_roles (name, permission, description) VALUES
   ('运营管理员', '["user:view","order:*","agent:*","course:*"]', '日常运营管理'),
   ('客服',      '["service:*","order:view"]',   '仅客服和查看订单')
 ON DUPLICATE KEY UPDATE permission = VALUES(permission);
-
--- ============================================================
--- 8. 推荐奖励配置（改用 configs 表，key 格式 referral_reward_{inviter}_{invitee}）
---    代码已统一使用 configs 表，不再依赖 referral_reward_matrix 表
--- ============================================================
 
 -- ============================================================
 -- 7. teams 自引用记录（R4：初始化时平台根用户自己引用自己）
