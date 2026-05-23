@@ -23,6 +23,8 @@ const notificationRoutes = require('./routes/notification');
 const mycoursesRoutes = require('./routes/mycourses');
 const videoRoutes = require('./routes/video');
 const walletRoutes = require('./routes/wallet');
+const feedbackRoutes = require('./routes/feedback');
+const adminFeedbackRoutes = require('./routes/admin/feedback');
 
 const app = express();
 
@@ -163,6 +165,8 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/my', mycoursesRoutes);
 app.use('/api/v1/video', videoRoutes);
 app.use('/api/v1/wallet', walletRoutes);
+app.use('/api/v1/feedbacks', feedbackRoutes);
+app.use('/api/v1/admin/feedbacks', adminFeedbackRoutes);
 
 // 404
 app.use((req, res) => {

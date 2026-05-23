@@ -84,6 +84,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { feedbackApi } from '@/api/service';
 
 const feedbackContent = ref('');
 const feedbackType = ref('bug');
@@ -107,15 +108,21 @@ function toggleFaq(idx) {
   faqList.value[idx].open = !faqList.value[idx].open;
 }
 
-function submitFeedback() {
+async function submitFeedback() {
   if (!feedbackContent.value.trim()) {
-    uni.showToast({ title: '请输入反馈内容', icon: 'none' });
-    return;
+    uni.showToast({ title: '请输入反馈内容', icon: 'none' }); return;
   }
-  uni.showToast({ title: '反馈已提交，感谢您的建议！', icon: 'success' });
-  feedbackContent.value = '';
+  if (feedbackContent.value.trim().length < 5) {
+    uni.showToast({ title: '内容太短', icon: 'none' }); return;
+  }
+  try {
+    await feedbackApi.submit({ type: feedbackType.value, content: feedbackContent.value.trim() });
+    uni.showToast({ title: '反馈已提交，感谢您的建议！', icon: 'success' });
+    feedbackContent.value = '';
+  } catch (e) {
+    uni.showToast({ title: '提交失败，请重试', icon: 'none' });
+  }
 }
-
 function contactService() {
   uni.navigateTo({ url: '/pages/service/conversations' });
 }

@@ -1,7 +1,10 @@
 <script>
+import { wsManager } from '@/utils/ws';
+
 export default {
   onLaunch() {
-    console.log('App Launch')
+    console.log('App Launch');
+    wsManager.connect();
   },
   onShow() {
     console.log('App Show')

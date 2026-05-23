@@ -9,6 +9,8 @@
     { "path": "pages/admin/index", "style": { "navigationBarTitleText": "管理后台" } },
     { "path": "pages/admin/service/list", "style": { "navigationBarTitleText": "客服管理" } },
     { "path": "pages/admin/service/chat", "style": { "navigationBarTitleText": "会话详情", "navigationStyle": "custom" } },
+    { "path": "pages/admin/feedback/list", "style": { "navigationBarTitleText": "意见反馈" } },
+    { "path": "pages/admin/feedback/detail", "style": { "navigationBarTitleText": "反馈详情", "navigationStyle": "custom" } },
     { "path": "pages/admin/config/index", "style": { "navigationBarTitleText": "系统配置", "navigationStyle": "custom" } },
     { "path": "pages/admin/purchase/list", "style": { "navigationBarTitleText": "拿货记录", "navigationStyle": "custom" } },
     { "path": "pages/admin/stats/index", "style": { "navigationBarTitleText": "数据统计", "navigationStyle": "custom" } },

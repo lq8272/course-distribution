@@ -33,6 +33,10 @@
         <text class="tab-icon">📊</text>
         <text class="tab-text">统计</text>
       </view>
+      <view :class="tab === 'feedback' ? 'tab active' : 'tab'" @click="switchTab('feedback')">
+        <text class="tab-icon">💡</text>
+        <text class="tab-text">反馈</text>
+      </view>
     </view>
 
     <!-- ===== 订单列表 ===== -->
@@ -460,6 +464,16 @@
         <text class="state-text">数据统计</text>
         <text class="state-hint">查看销售、佣金、返利汇总</text>
         <view class="btn-primary mt-32" @click="goStats">打开统计页面</view>
+      </view>
+    </block>
+
+    <!-- ===== 意见反馈 ===== -->
+    <block v-if="tab === 'feedback'">
+      <view class="state-card">
+        <view class="state-icon">💡</view>
+        <text class="state-text">意见反馈</text>
+        <text class="state-hint">查看和管理用户提交的意见反馈</text>
+        <view class="btn-primary mt-32" @click="goFeedback">打开反馈管理</view>
       </view>
     </block>
 
@@ -1200,6 +1214,10 @@ function getAvatarText(nickname) {
 // ===== 系统配置 =====
 function goStats() {
   uni.navigateTo({ url: '/pages/admin/stats/index' });
+}
+
+function goFeedback() {
+  uni.navigateTo({ url: '/pages/admin/feedback/list' });
 }
 
 function goPurchase() {

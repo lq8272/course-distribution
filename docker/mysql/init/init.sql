@@ -328,6 +328,26 @@ CREATE TABLE customer_messages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客服消息表';
 
 -- ============================================================
+-- 15b. feedbacks（用户意见反馈表）
+-- ============================================================
+DROP TABLE IF EXISTS feedbacks;
+CREATE TABLE feedbacks (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     BIGINT UNSIGNED NOT NULL COMMENT '反馈用户ID',
+  type        VARCHAR(32)    NOT NULL COMMENT '反馈类型：bug/suggest/other',
+  content     TEXT           NOT NULL COMMENT '反馈内容',
+  status      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '处理状态：0待处理 1处理中 2已处理 3已忽略',
+  handler_id  BIGINT UNSIGNED DEFAULT NULL COMMENT '处理人ID',
+  reply       TEXT           DEFAULT NULL COMMENT '处理回复',
+  created_at  DATETIME       DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
+  INDEX idx_type (type),
+  INDEX idx_status (status),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户意见反馈表';
+
+-- ============================================================
 -- 16. configs（全局配置表）
 -- ============================================================
 DROP TABLE IF EXISTS configs;
