@@ -1,4 +1,4 @@
-import api from './index.js';
+import { api } from './index.js';
 
 export const agentApi = {
   login: (data) => api.post('/agent/login', data),

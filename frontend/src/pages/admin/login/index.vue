@@ -41,6 +41,10 @@
       <view class="back-user" @click="goToUserLogin">
         返回用户登录
       </view>
+
+      <view class="back-user" @click="goToServiceLogin">
+        客服登录
+      </view>
     </view>
   </view>
 </template>
@@ -57,6 +61,10 @@ const showPassword = ref(false);
 
 function goToUserLogin() {
   uni.reLaunch({ url: '/pages/login/index' });
+}
+
+function goToServiceLogin() {
+  uni.reLaunch({ url: '/pages/agent/login/index' });
 }
 
 async function handleLogin() {
