@@ -52,7 +52,6 @@
       { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
       { "pagePath": "pages/distribute/index", "text": "分销", "iconPath": "static/tabbar/distribute.png", "selectedIconPath": "static/tabbar/distribute-active.png" },
       { "pagePath": "pages/team/index", "text": "团队", "iconPath": "static/tabbar/team.png", "selectedIconPath": "static/tabbar/team-active.png" },
-      { "pagePath": "pages/agent/workbench/index", "text": "客服", "iconPath": "static/tabbar/service.png", "selectedIconPath": "static/tabbar/service-active.png" },
       { "pagePath": "pages/user/index", "text": "我的", "iconPath": "static/tabbar/user.png", "selectedIconPath": "static/tabbar/user-active.png" }
     ]
   }
