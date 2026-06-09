@@ -243,8 +243,8 @@ router.post('/queue/:id/claim', async (req, res) => {
       [convId, req.agent.id]
     );
 
-    // 更新会话状态为进行中
-    await db.query('UPDATE customer_services SET status = 0, updated_at = NOW() WHERE id = ?', [convId]);
+    // 更新会话状态为处理中
+    await db.query('UPDATE customer_services SET status = 1, updated_at = NOW() WHERE id = ?', [convId]);
 
     ok(res, null);
   } catch (err) {
