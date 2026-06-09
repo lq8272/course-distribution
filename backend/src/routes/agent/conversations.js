@@ -25,15 +25,28 @@ router.get('/conversations', async (req, res) => {
        LEFT JOIN users u ON u.id = cs.user_id
        WHERE sa.agent_id = ?`;
     const params = [req.agent.id];
-    if (status !== undefined) {
-      sql += ' AND cs.status = ?';
-      params.push(Number(status));
+    if (status !== undefined && status !== '') {
+      const s = Number(status);
+      if (!isNaN(s)) {
+        sql += ' AND cs.status = ?';
+        params.push(s);
+      }
     }
     sql += ' ORDER BY cs.last_message_at DESC';
 
     const rows = await db.query(sql, params);
-    const masked = rows.map(r => ({ ...r, user_phone: maskPhone(r.user_phone) }));
-    ok(res, { rows: masked });
+    const masked = rows.map(r => ({
+      id: r.id,
+      userNickname: r.user_nickname || '微信用户',
+      userPhone: r.user_phone ? maskPhone(r.user_phone) : null,
+      userAvatar: null,
+      lastMessage: r.last_content || '',
+      lastMessageTime: formatTime(r.last_message_at),
+      unreadCount: r.unread_count || 0,
+      status: r.status,
+      statusText: STATUS_TEXT[r.status] || '未知',
+    }));
+    ok(res, { list: masked });
   } catch (err) {
     console.error('[agent/conversations]', err);
     return fail(res, 500, 50000, '查询失败');
@@ -69,7 +82,18 @@ router.get('/conversations/:id/messages', async (req, res) => {
       [convId, parseInt(page_size), offset]
     );
 
-    ok(res, { rows: rows.reverse() });
+    ok(res, {
+      list: (rows || []).reverse().map(r => ({
+        id: r.id,
+        content: r.content,
+        type: r.is_from_admin ? 'agent' : 'user',
+        isAgent: !!r.is_from_admin,
+        senderId: r.sender_id,
+        adminNickname: r.agent_nickname || '',
+        avatar: null,
+        createdAt: r.created_at,
+      }))
+    });
   } catch (err) {
     console.error('[agent/messages]', err);
     return fail(res, 500, 50000, '查询失败');
@@ -148,6 +172,37 @@ router.put('/conversations/:id/close', async (req, res) => {
 
 // ========== 待分配会话（可抢接） ==========
 
+// GET /api/agent/queue/stats 队列统计
+router.get('/queue/stats', async (req, res) => {
+  try {
+    const waitingRows = await db.query(
+      `SELECT COUNT(*) as cnt FROM customer_services cs
+       WHERE cs.status = 0
+         AND cs.id NOT IN (SELECT conversation_id FROM service_assignments)`
+    );
+    const myRows = await db.query(
+      `SELECT COUNT(*) as cnt FROM service_assignments sa
+       JOIN customer_services cs ON cs.id = sa.conversation_id
+       WHERE sa.agent_id = ? AND cs.status = 1`,
+      [req.agent.id]
+    );
+    const totalRows = await db.query(
+      `SELECT COUNT(*) as cnt FROM service_assignments sa
+       JOIN customer_services cs ON cs.id = sa.conversation_id
+       WHERE sa.agent_id = ?`,
+      [req.agent.id]
+    );
+    ok(res, {
+      waiting: waitingRows[0]?.cnt || 0,
+      processing: myRows[0]?.cnt || 0,
+      total: totalRows[0]?.cnt || 0,
+    });
+  } catch (err) {
+    console.error('[agent/queue/stats]', err);
+    return fail(res, 500, 50000, '查询失败');
+  }
+});
+
 // GET /api/agent/queue 待分配会话队列
 router.get('/queue', async (req, res) => {
   try {
@@ -202,6 +257,20 @@ router.post('/queue/:id/claim', async (req, res) => {
 });
 
 // ========== 工具 ==========
+
+const STATUS_TEXT = { 0: '待接待', 1: '处理中', 2: '已关闭' };
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+  if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
+  if (diff < 604800) return Math.floor(diff / 86400) + '天前';
+  return ts;
+}
 
 function maskPhone(phone) {
   if (!phone) return null;

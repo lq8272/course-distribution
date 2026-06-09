@@ -17,9 +17,9 @@
 const qiniu = require('qiniu');
 const crypto = require('crypto');
 
-// ==================== m3u8 签名缓存（5分钟TTL）====================
+// ==================== m3u8 签名缓存（10分钟TTL）====================
 const m3u8Cache = new Map();
-const M3U8_CACHE_TTL = 300 * 1000; // 5分钟
+const M3U8_CACHE_TTL = 600 * 1000; // 10分钟
 
 function getCachedM3u8(key) {
   const entry = m3u8Cache.get(key);
@@ -44,10 +44,22 @@ const BUCKET_IMAGE = process.env.QINIU_BUCKET_IMAGE || '';
 const BUCKET_VIDEO = process.env.QINIU_BUCKET_VIDEO || '';
 // 公开域名前缀（图片 bucket 的 CDN 域名）
 const PUBLIC_DOMAIN = process.env.QINIU_PUBLIC_DOMAIN || '';
+// 图片 bucket CDN 域名（私有 bucket，用 privateDownloadUrl 生成下载凭证）
+const PICTURE_DOMAIN = process.env.QINIU_PICTURE_DOMAIN || PUBLIC_DOMAIN || 'pictures.hhlfedu.com';
 // 视频 bucket 域名（私有 bucket 签名用，用于视频播放）
 const VIDEO_DOMAIN = process.env.QINIU_VIDEO_DOMAIN || PUBLIC_DOMAIN || 'videos.hhlfedu.com';
-// 私有bucket签名URL有效期（秒），默认1小时
-const SIGNED_URL_EXPIRE = parseInt(process.env.QINIU_URL_EXPIRE || '3600');
+// 七牛上传域名（按 zone 动态构造）
+const UPLOAD_HOST_MAP = {
+  z0: 'https://up-z0.qiniup.com',
+  z1: 'https://up-z1.qiniup.com',
+  z2: 'https://up-z2.qiniup.com',
+  na0: 'https://up-na0.qiniup.com',
+};
+const getUploadHost = () => UPLOAD_HOST_MAP[BUCKET_ZONE] || UPLOAD_HOST_MAP.z2;
+// 私有bucket签名URL有效期（秒），默认24小时（直连七牛方案用）
+const SIGNED_URL_EXPIRE = parseInt(process.env.QINIU_URL_EXPIRE || '86400');
+// CDN 时间戳防盗链密钥（七牛 CDN 控制台获取）
+const CDN_TIMESTAMP_KEY = process.env.QINIU_CDN_TIMESTAMP_KEY || '';
 // 七牛 bucket 区域（影响 API 请求节点）：
 // z0=华东, z1=华北, z2=华南, na0=北美
 const BUCKET_ZONE = process.env.QINIU_ZONE || 'z0';
@@ -58,9 +70,77 @@ const ZONE_MAP = {
   na0: qiniu.zone.Zone_na0,
 };
 const getZone = () => ZONE_MAP[BUCKET_ZONE] || qiniu.zone.Zone_z0;
+// Bucket 源站域名（用于 RS API / privateDownloadUrl，不能用 CDN 域名）
+const zoneSuffix = BUCKET_ZONE.replace('z', '');
+const getVideoBucketDomain = () => BUCKET_VIDEO + '.z' + zoneSuffix + '.qiniup.com';
+const getImageBucketDomain = () => BUCKET_IMAGE + '.z' + zoneSuffix + '.qiniup.com';
 
 // 是否已配置（未配置时返回友好提示）
 const isConfigured = () => !!(ACCESS_KEY && SECRET_KEY && BUCKET_IMAGE && BUCKET_VIDEO);
+
+// ==================== 私有bucket签名（QBox Token）====================
+/**
+ * 生成私有bucket资源的访问签名URL（QBox Token）
+ * 所有图片和视频下载统一使用此方式
+ *
+ * @param {string} key - 七牛存储key，如 images/xxx.jpg 或 videos/xxx.mp4
+ * @param {string} domain - CDN域名，如 pictures.hhlfedu.com 或 videos.hhlfedu.com
+ * @param {number} expires - 签名有效期（秒），默认 SIGNED_URL_EXPIRE
+ * @returns {string} 带签名的下载URL
+ */
+function createQboxSignedUrl(key, domain, expires = SIGNED_URL_EXPIRE) {
+  const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+  const config = new qiniu.conf.Config();
+  config.zone = getZone();
+  const bucketManager = new qiniu.rs.BucketManager(mac, config);
+  const deadline = Math.floor(Date.now() / 1000) + expires;
+  // 必须传完整 URL（带 https://），privateDownloadUrl 内部会正确处理
+  return bucketManager.privateDownloadUrl(domain, key, deadline);
+}
+
+/**
+ * 为 HLS 播放列表签名
+ *
+ * mode = 'signed'（默认）：.ts 路径替换为带签名的完整 URL，播放器直连七牛
+ * mode = 'relative'：.ts 路径替换为相对路径（如 ts/KhhO.../xxx/000000.ts），
+ *                   播放器请求同源 /ts/:key 路由，由后端流式转发到七牛
+ *
+ * @param {string} hlsContent - 原始 m3u8 文本
+ * @param {'signed'|'relative'} mode - 路径替换模式
+ * @returns {string} 处理后的 m3u8 文本
+ */
+function signHlsContent(hlsContent, mode = 'signed') {
+  const domainForStrip = VIDEO_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+  // 正则匹配 .ts/.key 路径：
+  // - 有目录的路径如 videos/seg0.ts  -> 匹配前面的目录+文件名
+  // - 裸文件名如 seg0.ts            -> 匹配整个文件名
+  // - 带域名的如 https://domain.com/seg0.ts -> 匹配到 .ts 为止
+  const TS_PATTERN = /^(.+?\.(?:ts|key)|\??\.?(?:ts|key))(.*)$/gm;
+
+  return hlsContent.replace(TS_PATTERN, (match, tsPath) => {
+    // 取干净路径，去掉 query string
+    let cleanPath = tsPath.split('?')[0];
+
+    // 去掉域名部分（支持 https://domain.com/ 和 domain.com/ 两种形式）
+    if (cleanPath.includes(domainForStrip)) {
+      cleanPath = cleanPath.substring(cleanPath.indexOf(domainForStrip) + domainForStrip.length);
+    }
+    // 去掉开头的 /
+    cleanPath = cleanPath.replace(/^\/+/, '');
+
+    if (mode === 'relative') {
+      // 关键：必须加 /ts/ 前缀，否则播放器会把 ts 分片请求发到 m3u8 所在路径（/hls-play-url/），
+      //       而不是 /ts/ 路由
+      const decoded = cleanPath.replace(/^\.?\/?videos\//, '').replace(/=/g, '_').replace(/\|/g, '/');
+      return '/ts/' + decoded.replace(/=/g, '_').replace(/\//g, '|');
+    }
+
+    // 默认 signed 模式：返回带签名的完整 URL（播放器直连 CDN）
+    const signedUrl = createQboxSignedUrl(cleanPath, VIDEO_DOMAIN);
+    return signedUrl;
+  });
+}
 
 /**
  * 生成图片上传凭证
@@ -72,16 +152,20 @@ function createImageUploadToken(key) {
     throw new Error('七牛云未配置，请设置环境变量 QINIU_ACCESS_KEY / QINIU_SECRET_KEY / QINIU_BUCKET_IMAGE');
   }
   const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+  const deadline = Math.floor(Date.now() / 1000) + 7200;
   const putPolicy = new qiniu.rs.PutPolicy({
     scope: BUCKET_IMAGE + ':' + key,
-    expires: 7200,
-    fsizeLimit: 20 * 1024 * 1024, // 20MB
-    mimeLimit: 'image/jpeg;image/png;image/gif;image/webp;image/heic',
+    deadline,
+    insertOnly: 1,
+    fsizeLimit: 10 * 1024 * 1024, // 10MB
+    mimeLimit: 'image/jpeg;image/png;image/gif;image/webp',
+    returnBody: '{"key":"$(key)","hash":"$(etag)","fsize":$(fsize)}',
   });
   return {
     token: putPolicy.uploadToken(mac),
     key,
     expires: 7200,
+    uploadHost: getUploadHost(),
   };
 }
 
@@ -98,16 +182,20 @@ function createUploadToken(key) {
     throw new Error('七牛云未配置，请设置环境变量 QINIU_ACCESS_KEY / QINIU_SECRET_KEY / QINIU_BUCKET_VIDEO');
   }
   const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+  const deadline = Math.floor(Date.now() / 1000) + 7200;
   const putPolicy = new qiniu.rs.PutPolicy({
-    scope: BUCKET_VIDEO + ':' + key,   // 限定只能上传到指定key，防止覆盖他人文件
-    expires: 7200,                 // 凭证有效期2小时
-    fsizeLimit: 500 * 1024 * 1024, // 500MB
-    mimeLimit: 'video/*',          // 只允许视频文件
+    scope: BUCKET_VIDEO + ':' + key,
+    deadline,
+    insertOnly: 1,
+    fsizeLimit: 2 * 1024 * 1024 * 1024, // 2GB
+    mimeLimit: 'video/mp4;video/quicktime;video/x-msvideo;video/x-matroska;video/webm',
+    returnBody: '{"key":"$(key)","hash":"$(etag)","fsize":$(fsize),"persistentId":"$(persistentId)"}',
   });
   return {
     token: putPolicy.uploadToken(mac),
     key,
     expires: 7200,
+    uploadHost: getUploadHost(),
   };
 }
 
@@ -132,8 +220,8 @@ function createSignedUrl(key, expires = SIGNED_URL_EXPIRE) {
 
   return new Promise((resolve, reject) => {
     const deadline = Math.floor(Date.now() / 1000) + expires;
-    // 根据 key 类型选择域名
-    const baseDomain = key.startsWith('videos/') ? VIDEO_DOMAIN : PUBLIC_DOMAIN;
+    // 根据 key 类型选择 bucket 源站域名（RS API 必须用源站域名，不能用 CDN 域名）
+    const baseDomain = key.startsWith('videos/') ? getVideoBucketDomain() : getImageBucketDomain();
     const encodedStr = qiniu.util.generateAccessTokenV2(bucketManager, '/' + key + '?d=' + deadline, 'GET');
     const baseUrl = (baseDomain.startsWith('http') ? baseDomain : 'https://' + baseDomain) + '/' + key;
     const signedUrl = baseUrl + '?' + encodedStr.split('?')[1];
@@ -144,84 +232,23 @@ function createSignedUrl(key, expires = SIGNED_URL_EXPIRE) {
 /**
  * 同步版本（推荐用于播放量大的场景，减少异步开销）
  * 支持 HLS (.m3u8) 播放列表，自动重写所有 .ts 分片的签名 URL
+ *
+ * 图片和视频统一使用 QBox Token（privateDownloadUrl）下载：
+ * - 图片用 pictures.hhlfedu.com + QBox token
+ * - 视频用 videos.hhlfedu.com + QBox token
  */
 function createSignedUrlSync(key, expires = SIGNED_URL_EXPIRE) {
   if (!isConfigured()) {
     return '';
   }
-  const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
-  const config = new qiniu.conf.Config();
-  config.zone = getZone();
-  const bucketManager = new qiniu.rs.BucketManager(mac, config);
-  // 根据 key 类型选择域名：videos/* 用视频 bucket 域名，images/* 用图片域名
-  const domainRaw = key.startsWith('videos/') ? VIDEO_DOMAIN : PUBLIC_DOMAIN;
-  const domain = domainRaw.replace(/^https?:\/\//, '');
-  const deadline = Math.floor(Date.now() / 1000) + expires;
-  // 七牛 privateDownloadUrl 返回无协议 URL，需追加 http:// 前缀
-  return 'http://' + bucketManager.privateDownloadUrl(domain, key, deadline);
+
+  // 图片 key：统一走私有 bucket + QBox 签名（七牛 CDN 统一鉴权）
+  if (key.startsWith('images/')) {
+    return createQboxSignedUrl(key, PICTURE_DOMAIN, expires);
+  }
+  // 视频 key 或其他（m3u8、ts分片等）：统一走视频 CDN（需签名）
+  return createQboxSignedUrl(key, VIDEO_DOMAIN, expires);
 }
-
-/**
- * 为 HLS 播放列表内容生成签名后的完整 URL（供播放器直接使用）
- * 替换 m3u8 中所有 .ts 分片路径为完整签名 URL
- *
- * @param {string} hlsContent - 原始 m3u8 文件内容文本
- * @param {number} expires - 签名有效期（秒），默认3600
- * @returns {string} 签名后的 m3u8 内容
- */
-/**
- *
- * 不在 m3u8 里嵌入带签名的绝对 URL，而是：
- * 1. 把 .ts 分片路径改成 /api/video/ts/{encoded_path} 形式（相对路径）
- * 2. 播放器请求 .ts 时走后端 /api/video/ts 接口
- * 3. 后端实时生成新签名，转发到七牛 —— 每次请求都是"此刻的签名"，永不过期
- *
- * @param {string} hlsContent - 原始 m3u8 文本
- * @returns {string} 签名后的 m3u8 文本
- */
-/**
- * 为 HLS 播放列表签名（代理方案）
- *
- * 不在 m3u8 里嵌入带签名的绝对 URL，而是：
- * 1. 把 .ts 分片路径改成 /api/v1/video/ts/{encoded_path} 形式（绝对路径）
- * 2. 播放器请求 .ts 时走后端 /api/v1/video/ts 接口
- * 3. 后端实时生成新签名，转发到七牛 —— 每次请求都是"此刻的签名"，永不过期
- *
- * @param {string} hlsContent - 原始 m3u8 文本
- * @returns {string} 签名后的 m3u8 文本
- */
-function signHlsContent(hlsContent) {
-  // 提取视频域名的基础路径，用于去掉 .ts 路径中的域名部分
-  // 例如 VIDEO_DOMAIN = 'videos.hhlfedu.com' 或 'https://videos.hhlfedu.com'
-  const domainForStrip = VIDEO_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  // 代理接口的绝对路径（路由挂载在 /api/v1/video）
-  const TS_PROXY_PATH = '/api/v1/video/ts/';
-
-  // 正则匹配 .ts/.key 路径：
-  // - 有目录的路径如 videos/seg0.ts  -> 匹配前面的目录+文件名
-  // - 裸文件名如 seg0.ts            -> 匹配整个文件名
-  // - 带域名的如 https://.../seg0.ts -> 匹配到 .ts 为止
-  const TS_PATTERN = /^(.+?\.(?:ts|key)|\.?(?:ts|key))(.*)$/gm;
-
-  return hlsContent.replace(TS_PATTERN, (match, tsPath) => {
-    // 取干净路径，去掉 query string
-    let cleanPath = tsPath.split('?')[0];
-
-    // 去掉域名部分（支持 https://domain.com/ 和 domain.com/ 两种形式）
-    if (cleanPath.includes(domainForStrip)) {
-      cleanPath = cleanPath.substring(cleanPath.indexOf(domainForStrip) + domainForStrip.length);
-    }
-    // 去掉开头的 /
-    cleanPath = cleanPath.replace(/^\/+/, '');
-
-    // URL-encode 路径中的关键字符，但保留 /
-    const encodedKey = encodeURIComponent(cleanPath).replace(/%2F/g, '/');
-
-    // 返回代理路径，播放器用绝对路径请求
-    return TS_PROXY_PATH + encodedKey;
-  });
-}
-
 /**
  * 拉取 m3u8 播放列表并返回所有分片已签名的完整内容
  * 用于 HLS 自适应码流：播放器请求此接口 → 后端拉取 m3u8 → 签名所有 .ts URL → 返回完整内容
@@ -229,37 +256,82 @@ function signHlsContent(hlsContent) {
  * @param {string} m3u8Key - 七牛存储 key（格式：videos/course_X_Y.m3u8）
  * @returns {Promise<{signedM3u8: string, contentType: string}>}
  */
-async function getSignedHlsPlaylist(m3u8Key) {
+async function getSignedHlsPlaylist(m3u8Key, mode = 'signed', expires = SIGNED_URL_EXPIRE) {
   if (!isConfigured()) {
     throw new Error('七牛云未配置');
   }
 
-  // 缓存命中直接返回
-  const cached = getCachedM3u8(m3u8Key);
-  if (cached) {
-    return cached;
+  // 缓存只用于 signed 模式；relative 模式每次实时生成（路径不同，不能共用缓存）
+  if (mode === 'signed') {
+    const cached = getCachedM3u8(m3u8Key);
+    if (cached) {
+      return cached;
+    }
   }
 
-  // 拉取原始 m3u8 使用视频域名
-  const domainRaw = VIDEO_DOMAIN;
-  const domain = domainRaw.startsWith('http') ? domainRaw : 'https://' + domainRaw;
-  const m3u8Url = domain + '/' + m3u8Key;
+  // 拉取原始 m3u8 内容（通过 CDN + QBox token）
+  let hlsContent = '';
+  const contentType = 'application/vnd.apple.mpegurl';
 
-  // 拉取原始 m3u8 内容
-  const response = await fetch(m3u8Url);
-  if (!response.ok) {
-    throw new Error(`拉取 m3u8 失败: ${response.status} ${response.statusText}`);
+  try {
+    const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+    const config = new qiniu.conf.Config();
+    config.zone = getZone();
+    const bucketManager = new qiniu.rs.BucketManager(mac, config);
+    const deadline = Math.floor(Date.now() / 1000) + expires;
+    // 使用 CDN 域名 + QBox token 拉取（需带 https:// 前缀）
+    const signedUrl = bucketManager.privateDownloadUrl(VIDEO_DOMAIN, m3u8Key, deadline);
+    const response = await fetch(signedUrl);
+    if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
+    hlsContent = await response.text();
+  } catch (e) {
+    throw new Error(`拉取 m3u8 失败: ${e.message}`);
   }
-  const hlsContent = await response.text();
-  const contentType = response.headers.get('content-type') || 'application/vnd.apple.mpegurl';
 
-  // 签名所有 .ts 分片路径
-  const signedM3u8 = signHlsContent(hlsContent);
+  // 签名所有 .ts 分片路径（mode='relative' 时生成相对路径，mode='signed' 时生成签名 URL）
+  const signedM3u8 = signHlsContent(hlsContent, mode);
   const result = { signedM3u8, contentType };
 
-  // 写入缓存
-  setCachedM3u8(m3u8Key, result);
+  // signed 模式写入缓存；relative 模式不缓存
+  if (mode === 'signed') {
+    setCachedM3u8(m3u8Key, result);
+  }
   return result;
+}
+
+// ==================== 图片代理（后端拉取再转发） ====================
+/**
+ * 后端代理拉取图片（参考 .ts 分片代理模式）
+ * 私有 bucket 无法直接给前端签名 URL（QBox token 不被 CDN 接受），
+ * 改为后端用 RS API 拉取图片再转发给前端
+ *
+ * @param {string} key - 七牛存储 key（格式：images/xxx.jpg）
+ * @returns {Promise<{data: Buffer, contentType: string}>}
+ */
+async function fetchImage(key) {
+  if (!isConfigured()) {
+    throw new Error('七牛云未配置');
+  }
+
+  const mac = new qiniu.auth.digest.Mac(ACCESS_KEY, SECRET_KEY);
+  const config = new qiniu.conf.Config();
+  config.zone = getZone();
+  const bucketManager = new qiniu.rs.BucketManager(mac, config);
+
+  // 使用七牛 bucket 源站域名 fetch（CDN 不接受 QBox token）
+  // 源站域名格式：bucket.zN.qiniup.com
+  const deadline = Math.floor(Date.now() / 1000) + SIGNED_URL_EXPIRE;
+  const signedUrl = bucketManager.privateDownloadUrl(PICTURE_DOMAIN, key, deadline);
+
+  const response = await fetch(signedUrl);
+  if (!response.ok) {
+    throw new Error(`fetch failed: ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') || 'image/jpeg';
+  const buffer = await response.arrayBuffer();
+
+  return { data: Buffer.from(buffer), contentType };
 }
 
 // ==================== 回调通知处理 ====================
@@ -372,11 +444,13 @@ module.exports = {
   createSignedUrlSync,
   signHlsContent,
   getSignedHlsPlaylist,
+  fetchImage,
   verifyCallback,
   deleteFile,
   triggerPfop,
   generateVideoKey,
   generateImageKey,
+  getUploadHost,
   getPublicUrl(key) {
     if (!PUBLIC_DOMAIN) return key;
     return (PUBLIC_DOMAIN.startsWith('http') ? PUBLIC_DOMAIN : 'https://' + PUBLIC_DOMAIN) + '/' + key;

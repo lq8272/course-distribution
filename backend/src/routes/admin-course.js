@@ -28,6 +28,19 @@ router.get('/list', async (req, res) => {
       pageSize: parseInt(page_size),
       keyword,
     });
+    // 为每门课程查询视频数量
+    if (result.rows && result.rows.length > 0) {
+      const ids = result.rows.map(c => c.id);
+      const counts = await db.query(
+        'SELECT course_id, COUNT(*) as cnt FROM course_videos WHERE course_id IN (?) GROUP BY course_id',
+        [ids]
+      );
+      const countMap = {};
+      counts.forEach(r => { countMap[r.course_id] = r.cnt; });
+      result.rows.forEach(c => {
+        c.video_count = countMap[c.id] || 0;
+      });
+    }
     ok(res, result);
   } catch (err) {
     console.error(err);
@@ -38,7 +51,7 @@ router.get('/list', async (req, res) => {
 // POST /api/admin/course/create
 router.post('/create', async (req, res) => {
   try {
-    const { title, description, cover_image, video_key, price, is_free, category_id, sort, is_distribution, commission_ratio, is_hot, hot_commission_rate } = req.body;
+    const { title, description, cover_image, video_key, price, is_free, category_id, sort, is_distribution, commission_ratio, is_hot, hot_commission_rate, videos } = req.body;
     if (!title) return fail(res, 400, 40000, '课程标题不能为空');
     if (title.length > 200) return fail(res, 400, 40002, '课程标题不能超过200字符');
     if (price !== undefined && price !== null && (isNaN(Number(price)) || Number(price) < 0)) {
@@ -58,11 +71,31 @@ router.post('/create', async (req, res) => {
       commission_ratio: commission_ratio || 0,
       is_hot: is_hot ? 1 : 0,
       hot_commission_rate: is_hot ? (hot_commission_rate || 0) : 0,
+      videos,
     });
     ok(res, { id });
   } catch (err) {
     console.error(err);
     return fail(res, 500, 50000, '创建失败');
+  }
+});
+
+// PUT /api/admin/course/:id/status
+router.put('/:id/status', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id || isNaN(id)) return fail(res, 400, 40000, '无效的课程ID');
+  const { status } = req.body;
+  if (status === undefined || ![0, 1].includes(Number(status))) {
+    return fail(res, 400, 40000, 'status 必须是 0 或 1');
+  }
+  try {
+    const existed = await Course.findById(id);
+    if (!existed) return fail(res, 404, 40400, '课程不存在');
+    await db.execute('UPDATE courses SET is_show = ? WHERE id = ?', [Number(status), id]);
+    ok(res, null);
+  } catch (err) {
+    console.error(err);
+    return fail(res, 500, 50000, '更新失败');
   }
 });
 
@@ -116,6 +149,7 @@ router.delete('/:id', async (req, res) => {
       [id]
     );
     await conn.execute('DELETE FROM orders WHERE course_id = ?', [id]);
+    await conn.execute('DELETE FROM course_videos WHERE course_id = ?', [id]);
     await conn.execute('DELETE FROM courses WHERE id = ?', [id]);
 
     await conn.commit();

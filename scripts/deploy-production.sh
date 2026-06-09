@@ -1,128 +1,137 @@
 #!/usr/bin/env bash
 # ============================================================
-# deploy-production.sh — 一键生产部署脚本（Linux/macOS）
+# deploy-production.sh — 纯 Docker 生产部署脚本（Linux/macOS）
 #
-# 使用前提：
-#   1. 已完成域名备案
-#   2. 已将 .env.production.example 复制为 .env.production 并填写真实值
-#   3. SSL 证书已放入 docker/nginx/ssl/
+# 核心原则：服务器上所有构建均在 Docker 容器内完成，无需在服务器安装 Node.js
 #
-# 使用方法：
-#   bash scripts/deploy-production.sh
+# 使用方式：
+#   首次部署：./scripts/deploy-production.sh init user@server.com /path/to/repo
+#   更新部署：./scripts/deploy-production.sh deploy user@server.com /path/to/repo
+#   查看状态：./scripts/deploy-production.sh status user@server.com /path/to/repo
+#   查看日志：./scripts/deploy-production.sh logs user@server.com /path/to/repo [service]
+#   停止服务：./scripts/deploy-production.sh stop user@server.com /path/to/repo
 # ============================================================
 
 set -e
-cd "$(dirname "$0")/.."
 
-echo "========================================"
-echo "  视频课程分销 - 生产部署脚本"
-echo "========================================"
-echo ""
+SSH_TARGET="${2:-}"
+REMOTE_REPO="${3:-}"
+SERVICE="${4:-}"
 
-# ---------- 1. 前置检查 ----------
-echo "[1/5] 前置检查..."
-if [ ! -f ".env.production" ]; then
-    echo "  ERROR: .env.production 不存在"
-    echo "  请先复制 .env.production.example 为 .env.production 并填写真实值"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info()  { echo -e "${GREEN}[INFO]${NC}  $1"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step()  { echo -e "${BLUE}[STEP]${NC}  $1"; }
+
+check_args() {
+  local need_server=1
+  case "$1" in
+    status|stop|clean) need_server=0 ;;
+  esac
+  if [ $need_server -eq 1 ] && [ -z "$SSH_TARGET" ] || [ -z "$REMOTE_REPO" ]; then
+    echo "用法: $0 {init|deploy|status|logs|stop|clean} user@server.com /path/to/repo [service]"
+    echo ""
+    echo "  示例: $0 init  ubuntu@129.204.199.134 /home/ubuntu/course-distribute"
+    echo "        $0 deploy ubuntu@129.204.199.134 /home/ubuntu/course-distribute"
+    echo "        $0 logs  ubuntu@129.204.199.134 /home/ubuntu/course-distribute backend"
     exit 1
-fi
-
-SSL_CERT="./docker/nginx/ssl/fullchain.pem"
-SSL_KEY="./docker/nginx/ssl/privkey.pem"
-if [ ! -f "$SSL_CERT" ] || [ ! -f "$SSL_KEY" ]; then
-    echo "  WARNING: SSL 证书未找到"
-    echo "  如需 HTTPS，请将证书放入 docker/nginx/ssl/ 目录"
-fi
-
-if ! command -v docker &> /dev/null; then
-    echo "  ERROR: Docker 未安装"
-    exit 1
-fi
-echo "  Docker: OK"
-
-# ---------- 2. 构建前端 ----------
-echo ""
-echo "[2/5] 构建前端生产版本..."
-cd frontend
-npm run build:mp-weixin
-
-# 复制 static 目录
-node -e "
-const fs = require('fs'), path = require('path');
-const src = path.join(__dirname, 'static');
-const dst = path.join(__dirname, 'dist', 'build', 'mp-weixin', 'static');
-if (fs.existsSync(src)) {
-    fs.mkdirSync(path.dirname(dst), { recursive: true });
-    fs.cpSync(src, dst, { recursive: true });
-    console.log('static/ copied');
-} else {
-    console.log('static/ not found, skipping');
+  fi
 }
-"
-cd ..
 
-# ---------- 3. 启动生产服务 ----------
-echo ""
-echo "[3/5] 启动生产服务（MySQL + Redis + Backend + Nginx）..."
+ssh_cmd() {
+  ssh -o StrictHostKeyChecking=no "$SSH_TARGET" "$@"
+}
 
-set +e
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile production up -d --build
-SETUP_EXIT=$?
-set -e
+check_local() {
+  log_info "检查本地前置条件..."
+  command -v ssh &>/dev/null || { log_error "SSH 客户端未安装"; exit 1; }
+  command -v docker &>/dev/null || { log_error "Docker 未安装"; exit 1; }
+  log_info "本地前置条件检查通过"
+}
 
-if [ $SETUP_EXIT -ne 0 ]; then
-    echo "  ERROR: Docker Compose 启动失败"
-    exit 1
-fi
+check_server() {
+  log_step "检查服务器前置条件..."
+  log_info "Docker: $(ssh_cmd "docker --version")"
+  log_info "Compose: $(ssh_cmd "docker compose version")"
+  ssh_cmd "test -f $REMOTE_REPO/.env.production" || { log_error ".env.production 不存在"; exit 1; }
+  log_info "服务器前置条件检查通过"
+}
 
-echo "  服务启动中，等待健康检查（30秒）..."
-sleep 30
+sync_code() {
+  log_step "同步代码 (git pull)..."
+  ssh_cmd "cd $REMOTE_REPO && git pull origin master 2>&1 || git pull origin main 2>&1"
+  log_info "代码同步完成"
+}
 
-# 检查后端
-BACKEND_OK=false
-for i in $(seq 1 6); do
-    if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
-        BACKEND_OK=true
-        break
+start_services() {
+  log_step "启动生产服务 (docker compose up -d --build)..."
+  ssh_cmd "cd $REMOTE_REPO && docker compose -f docker-compose.prod.yml up -d --build 2>&1"
+  log_info "等待服务启动（30秒）..."
+  sleep 30
+
+  local max_wait=60 waited=0
+  while [ $waited -lt $max_wait ]; do
+    if ssh_cmd "curl -sf http://localhost/api/health" &>/dev/null; then
+      log_info "后端健康检查通过"
+      return 0
     fi
-    echo "  等待后端就绪... ($i/6)"
+    echo "  等待中... ($((waited + 5))s / ${max_wait}s)"
     sleep 5
-done
+    waited=$((waited + 5))
+  done
+  log_warn "健康检查超时，请查看日志"
+}
 
-if $BACKEND_OK; then
-    echo "  后端健康检查: OK"
-else
-    echo "  WARNING: 后端健康检查未通过，请检查容器日志"
-    echo "  查看日志: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend"
-fi
-
-# 检查 Nginx
-if curl -sf http://localhost/api/health > /dev/null 2>&1; then
-    echo "  Nginx 代理: OK"
-else
-    echo "  WARNING: Nginx 未就绪（检查 SSL 证书配置）"
-fi
-
-# ---------- 4. 监控栈 ----------
-echo ""
-echo "[4/5] 监控栈（Prometheus + Grafana，可选）..."
-read -p "  是否启动监控栈？(y/N): " ans
-if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-    docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile monitoring up -d
-    echo "  Prometheus: http://localhost:9090"
-    echo "  Grafana:    http://localhost:3001 （admin/admin123）"
-fi
-
-# ---------- 5. 完成 ----------
-echo ""
-echo "========================================"
-echo "  部署完成！"
-echo "========================================"
-echo ""
-echo "  API 地址:    https://你的域名.com/api"
-echo "  小程序导入:  frontend/dist/build/mp-weixin"
-echo ""
-echo "  常用命令:"
-echo "    查看日志: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f backend"
-echo "    停止服务: docker compose -f docker-compose.yml -f docker-compose.prod.yml down"
-echo ""
+case "${1:-}" in
+  init)
+    check_args init
+    check_local
+    check_server
+    sync_code
+    start_services
+    ;;
+  deploy|update)
+    check_args deploy
+    check_local
+    sync_code
+    start_services
+    ;;
+  status)
+    check_args status
+    echo ""
+    ssh_cmd "cd $REMOTE_REPO && docker compose -f docker-compose.prod.yml ps"
+    echo ""
+    log_info "API: $(ssh_cmd "curl -sf http://localhost/api/health")"
+    ;;
+  logs)
+    check_args logs
+    if [ -n "$SERVICE" ]; then
+      ssh_cmd "cd $REMOTE_REPO && docker compose -f docker-compose.prod.yml logs -f $SERVICE"
+    else
+      ssh_cmd "cd $REMOTE_REPO && docker compose -f docker-compose.prod.yml logs -f"
+    fi
+    ;;
+  stop)
+    check_args stop
+    log_info "停止所有服务..."
+    ssh_cmd "cd $REMOTE_REPO && docker compose -f docker-compose.prod.yml down"
+    log_info "服务已停止"
+    ;;
+  clean)
+    check_args clean
+    log_warn "清理 Docker 资源..."
+    ssh_cmd "docker system prune -f"
+    ;;
+  *)
+    echo "用法: $0 {init|deploy|status|logs|stop|clean} user@server.com /path/to/repo [service]"
+    echo ""
+    echo "  纯 Docker 原则：服务器无需 Node.js/npm，所有构建在容器内完成"
+    exit 1
+    ;;
+esac

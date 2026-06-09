@@ -32,6 +32,11 @@ router.get('/my', auth, async (req, res) => {
     const stats = await Commission.stats(req.user.id);
     // 推广链接：使用 PROMO_BASE_URL 环境变量拼接推广码
     const promo_base_url = process.env.PROMO_BASE_URL || '';
+
+    // 当前登录分销商的赠送名额信息
+    const gift_total = agent.gift_accounts_dr || 0;
+    const gift_remaining = Math.max(0, (agent.gift_accounts_dr || 0) - (agent.gift_used || 0));
+
     ok(res, {
       is_agent: true,
       agent: {
@@ -40,6 +45,8 @@ router.get('/my', auth, async (req, res) => {
         promotion_url,
         promo_base_url,
         level_name,
+        gift_total,
+        gift_remaining,
       },
       stats,
     });

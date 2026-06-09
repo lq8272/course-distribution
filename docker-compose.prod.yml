@@ -1,24 +1,103 @@
 # ============================================================
-# docker-compose.prod.yml — 生产环境覆盖配置
+# docker-compose.prod.yml — 生产环境（完全基于 Docker Compose）
+#
+# 包含：MySQL + Redis + 后端构建(一次) + 前端构建(一次) + Nginx
+# 无需 SSH 到服务器，所有构建在容器内完成。
 #
 # 使用方式：
-#   NODE_ENV=production docker-compose -f docker-compose.yml -f docker-compose.prod.yml --profile production up -d
+#   首次部署：docker compose -f docker-compose.prod.yml up -d --build
+#   更新部署：docker compose -f docker-compose.prod.yml up -d --build
+#   停止服务：docker compose -f docker-compose.prod.yml down
+#   查看日志：docker compose -f docker-compose.prod.yml logs -f [service]
 #
-# 必须先设置环境变量（或在 .env 中配置）：
-#   - JWT_SECRET          JWT 签名密钥（必填，必须足够随机）
-#   - JWT_REFRESH_SECRET  Refresh Token 密钥（必填）
-#   - MYSQL_ROOT_PASSWORD MySQL 密码（必填）
-#   - CORS_ORIGINS        允许的来源域名（必填，如 https://wx.example.com）
-#   - PROMO_BASE_URL      推广落地页域名（必填，如 https://wx.example.com）
-#   - QINIU_SECRET_KEY   七牛云 SK（必填）
-#   - SSL 证书文件放入 ./docker/nginx/ssl/（可选，无则 Nginx 降级为 HTTP）
+# 前置条件：
+#   1. 将 .env.production.example 复制为 .env.production 并填写真实值
+#   2. 将 SSL 证书放入 ./docker/nginx/ssl/fullchain.pem 和 privkey.pem
+#      （无 SSL 则删除 ssl_* 相关配置，或使用 Let's Encrypt 容器自动申请）
 # ============================================================
 
 services:
-  backend:
-    profiles:
-      - production
+  # --------------- MySQL 数据库 ---------------
+  mysql:
+    image: mysql:8.0
+    container_name: course_mysql
+    restart: always
     environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 必须设置}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-course_distribute}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d/init:ro
+      - ./docker/mysql/seed:/docker-entrypoint-initdb.d/seed:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --init-connect='SET NAMES utf8mb4'
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - course_net
+
+  # --------------- Redis 缓存 ---------------
+  redis:
+    image: redis:6.2-alpine
+    container_name: course_redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-nBKh2HOKGjFoWuPTUK7GqSzfP0fdDBgM}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-nBKh2HOKGjFoWuPTUK7GqSzfP0fdDBgM}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - course_net
+
+  # --------------- 数据库初始化（仅首次启动运行） ---------------
+  db-init:
+    image: mysql:8.0
+    container_name: course_db_init
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 必须设置}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-course_distribute}
+    volumes:
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d/init:ro
+      - ./docker/mysql/seed:/docker-entrypoint-initdb.d/seed:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    entrypoint: [""]
+    command: ["echo", "数据库初始化脚本将由 mysql 容器在首次启动时自动执行"]
+    networks:
+      - course_net
+
+  # --------------- 后端 API 服务 ---------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: course_backend
+    restart: always
+    env_file: []
+    environment:
+      PORT: 3000
       NODE_ENV: production
       DB_HOST: mysql
       DB_PORT: 3306
@@ -28,7 +107,7 @@ services:
       DB_POOL_SIZE: 50
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-nBKh2HOKGjFoWuPTUK7GqSzfP0fdDBgM}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须设置}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET 必须设置}
       JWT_EXPIRES_IN: 1h
@@ -38,31 +117,86 @@ services:
       WECHAT_APPID: ${WECHAT_APPID:-}
       WECHAT_SECRET: ${WECHAT_SECRET:-}
       QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY:-}
-      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY:?QINIU_SECRET_KEY 必须设置}
+      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY:-}
       QINIU_BUCKET_IMAGE: ${QINIU_BUCKET_IMAGE:-}
       QINIU_BUCKET_VIDEO: ${QINIU_BUCKET_VIDEO:-}
       QINIU_PUBLIC_DOMAIN: ${QINIU_PUBLIC_DOMAIN:-}
       QINIU_VIDEO_DOMAIN: ${QINIU_VIDEO_DOMAIN:-videos.hhlfedu.com}
-      QINIU_URL_EXPIRE: 3600
+      QINIU_URL_EXPIRE: 86400
       QINIU_ZONE: ${QINIU_ZONE:-z0}
-    volumes:
-      # 注意：./backend:/app 仍然保留（开发时代码热更新），但生产建议去掉
-      # 只保留命名卷保护 node_modules
-      - backend_node_modules:/app/node_modules
-
-  nginx:
-    profiles:
-      - production
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
     depends_on:
-      backend:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - course_net
+
+  # --------------- 前端构建（一次性） ---------------
+  # 仅在 --build 时执行，构建完成后容器退出
+  # 构建产物通过 docker cp 或匿名卷传递给 nginx
+  frontend-builder:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: course_frontend_builder
+    restart: "no"
+    environment:
+      NODE_ENV: production
     volumes:
-      # SSL 证书
-      - ./docker/nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-      - ./docker/nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - frontend_dist:/app/dist/build/mp-weixin
+      - frontend_static:/app/static
+    networks:
+      - course_net
+    # 构建完成后自动退出，结果留在匿名卷 frontend_dist 中
+
+  # --------------- Nginx 反向代理 + 前端静态文件 ---------------
+  nginx:
+    image: nginx:alpine
+    container_name: course_nginx
+    restart: always
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
-      # 前端构建产物（H5 webview 版，deploy.sh 构建后才有内容）
-      - ./frontend/dist/build/mp-weixin:/var/www/html:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+      - frontend_static:/etc/nginx/static:ro
+      # SSL 证书（可选，有则启用，无则只监听 HTTP）
+      - ./docker/nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - ./docker/nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - course_net
+
+  # --------------- Certbot 自动续期 SSL（可选） ---------------
+  # 仅当使用 Let's Encrypt 自动申请/续期证书时启用
+  # certbot:
+  #   image: certbot/certbot
+  #   container_name: course_certbot
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./docker/nginx/ssl:/etc/nginx/ssl:rw
+  #     - ./certbot/www:/var/www/certbot:ro
+  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h; done'"
+
+networks:
+  course_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  frontend_dist:
+  frontend_static:

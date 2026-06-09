@@ -10,9 +10,9 @@ if (_nodeEnv === 'production') {
     JWT_SECRET: _jwtSecret,
     JWT_REFRESH_SECRET: _jwtRefreshSecret,
     DB_PASSWORD: process.env.DB_PASSWORD,
-    REDIS_PASSWORD: process.env.REDIS_PASSWORD,
   };
-  const forbidden = ['dev_secret', 'dev_refresh_secret', 'your-secret-key', 'CHANGE_THIS', 'password', '123456', ''];
+  // REDIS_PASSWORD 允许为空（Redis 服务端可能未设密码）
+  const forbidden = ['dev_secret', 'dev_refresh_secret', 'your-secret-key', 'CHANGE_THIS', 'password', '123456'];
   for (const [name, value] of Object.entries(requiredSecrets)) {
     if (!value || forbidden.includes(value)) {
       console.error('========================================');
@@ -60,8 +60,8 @@ module.exports = {
   },
 
   wechat: {
-    appid: process.env.WX_APPID || process.env.WECHAT_APPID || 'wx95b62970cb11c3c0',
-    secret: process.env.WX_SECRET || process.env.WECHAT_SECRET || '9ba9576cca9786a1d64e48d5d4465efd',
+    appid: process.env.WX_APPID || process.env.WECHAT_APPID || '',
+    secret: process.env.WX_SECRET || process.env.WECHAT_SECRET || '',
   },
 
   oss: {
@@ -78,8 +78,12 @@ module.exports = {
     bucketImage: process.env.QINIU_BUCKET_IMAGE || '',
     bucketVideo: process.env.QINIU_BUCKET_VIDEO || '',
     publicDomain: process.env.QINIU_PUBLIC_DOMAIN || '',
+    pictureDomain: process.env.QINIU_PICTURE_DOMAIN || '',
+    videoDomain: process.env.QINIU_VIDEO_DOMAIN || '',
+    zone: process.env.QINIU_ZONE || 'z0',
     urlExpire: parseInt(process.env.QINIU_URL_EXPIRE || '3600'),
     callbackSecret: process.env.QINIU_CALLBACK_SECRET || '',
+    cdnTimestampKey: process.env.QINIU_CDN_TIMESTAMP_KEY || '',
   },
 
   platformRoot: {

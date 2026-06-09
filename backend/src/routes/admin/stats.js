@@ -152,4 +152,30 @@ router.get('/sales', auth, adminAuth, async (req, res) => {
   }
 });
 
+// GET /api/admin/stats/courses 课程销量排行
+router.get('/courses', auth, adminAuth, async (req, res) => {
+  try {
+    const rows = await db.query(`
+      SELECT
+        c.id,
+        c.title,
+        c.cover_image as cover_img,
+        COUNT(o.id) as sales_count,
+        COALESCE(SUM(CASE WHEN o.status IN (1,2) THEN o.total_amount ELSE 0 END), 0) as total_amount
+      FROM courses c
+      LEFT JOIN orders o ON o.course_id = c.id
+      GROUP BY c.id, c.title, c.cover_image
+      ORDER BY sales_count DESC, total_amount DESC
+      LIMIT 20
+    `);
+    Array.isArray(rows) && rows.forEach(r => {
+      r.total_amount = parseFloat(r.total_amount || 0);
+    });
+    ok(res, Array.isArray(rows) ? rows : []);
+  } catch (err) {
+    console.error(err);
+    return fail(res, 500, 50000, '查询失败');
+  }
+});
+
 module.exports = router;

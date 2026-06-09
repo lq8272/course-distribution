@@ -65,7 +65,7 @@ function init(server) {
     }
 
     const userId = payload.id;
-    const isAdmin = payload.is_admin || false;
+    const isAdmin = payload.is_admin || payload.type === 'service_agent' || false;
 
     // 存储连接
     clientInfo.set(ws, { userId, isAdmin });

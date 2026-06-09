@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getRedis, REDIS_KEYS } = require('../config/redis');
+const Commission = require('./Commission');
 
 /** 生成随机推广码（数字+字母） */
 function generateCode(length = 8) {
@@ -56,15 +57,16 @@ const Agent = {
   },
 
   /**
-   * 审核通过（完整流程 — 方案 5.9 节）
+   * 审核通过
    *
    * 事务内完成：
    * 1. 更新 agents.status = 1
    * 2. 推荐人的 referral_count + 1
-   * 3. 推荐人是 MXJ/CJHH 时初始化 gift_accounts_dr
-   * 4. 写入 recommendation_rewards（一次性推荐奖励）
-   * 5. 创建 teams 记录（parent_id = 推荐人，root_id = 自己）
+   * 3. 初始化被审核人的赠送名额（gift_accounts_dr）和已用数量（gift_used）
+   * 4. 推荐人立即获得推荐奖励（写入 commissions 表，type=REFERRAL）
+   * 5. 创建 teams 记录
    * 6. 递归向下更新所有 descendant 的 root_id = 自己
+   * 7. 补偿历史订单佣金
    */
   async approve(id, adminId) {
     const conn = await db.getConnection();
@@ -91,42 +93,53 @@ const Agent = {
           [agent.recommender_id]
         );
 
-        // 3. 推荐人是 MXJ/CJHH → 初始化 gift_accounts_dr（仅当尚未初始化时）
+        // 3. 初始化被审核人的赠送名额（基于被审核人自己的等级）
+        const [levelCfg] = await conn.query(
+          'SELECT gift_accounts FROM agent_levels WHERE level = ? LIMIT 1',
+          [agent.level]
+        );
+        const giftAccounts = levelCfg.length ? parseInt(levelCfg[0].gift_accounts || 0) : 0;
+        await conn.execute(
+          'UPDATE agents SET gift_accounts_dr = ?, gift_used = 0 WHERE user_id = ?',
+          [giftAccounts, agent.user_id]
+        );
+
+        // 4. 推荐人立即获得推荐奖励（写入 commissions 表）
+        //    查询推荐人的等级
         const [recAgent] = await conn.query(
-          'SELECT user_id, level, gift_accounts_dr FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
+          'SELECT level FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
           [agent.recommender_id]
         );
-        if (recAgent.length && recAgent[0].gift_accounts_dr === 0) {
-          const [levelCfg] = await conn.query(
-            'SELECT gift_accounts FROM agent_levels WHERE level = ? LIMIT 1',
-            [recAgent[0].level]
+        if (recAgent.length) {
+          const inviterLevel = recAgent[0].level.toLowerCase();
+          const inviteeLevel = agent.level.toLowerCase();
+          const rewardKey = `referral_reward_${inviterLevel}_${inviteeLevel}`;
+          const [rewardCfg] = await conn.query(
+            "SELECT value FROM configs WHERE `key` = ? LIMIT 1",
+            [rewardKey]
           );
-          if (levelCfg.length && levelCfg[0].gift_accounts > 0) {
+          const rewardAmount = rewardCfg.length ? parseFloat(rewardCfg[0].value || 0) : 0;
+          if (rewardAmount > 0) {
+            // 写入 commissions 表，type=REFERRAL（无 order_id 关联，order_id=0）
             await conn.execute(
-              'UPDATE agents SET gift_accounts_dr = ? WHERE user_id = ?',
-              [levelCfg[0].gift_accounts, agent.recommender_id]
+              `INSERT INTO commissions (user_id, order_id, level, type, amount, profit_margin, status, created_at)
+               VALUES (?, 0, 1, 'REFERRAL', ?, 0.00, 1, NOW())`,
+              [agent.recommender_id, rewardAmount]
             );
+            console.log(`[approve] 推荐奖励 ${rewardAmount}元 写入 commissions，推荐人=${agent.recommender_id}，被推荐人=${agent.user_id}，key=${rewardKey}`);
           }
         }
-
-        // 4. 写入推荐奖励（一次性奖励，金额根据推荐人等级×被推荐人等级查 configs）
-        //    key 格式: referral_reward_{inviter_level}_{invitee_level}（与 seed.sql 保持一致）
-        //    例如: referral_reward_mxj_dr, referral_reward_cjhh_cjhh
-        const inviterLevel = recAgent[0].level.toLowerCase(); // 推荐人等级 dr/mxj/cjhh
-        const inviteeLevel = agent.level.toLowerCase();        // 被推荐人等级
-        const rewardKey = `referral_reward_${inviterLevel}_${inviteeLevel}`;
-        const [rewardCfg] = await conn.query(
-          "SELECT value FROM configs WHERE `key` = ? LIMIT 1",
-          [rewardKey]
+      } else {
+        // 无推荐人：也为自己的赠送名额做初始化
+        const [levelCfg] = await conn.query(
+          'SELECT gift_accounts FROM agent_levels WHERE level = ? LIMIT 1',
+          [agent.level]
         );
-        const rewardAmount = rewardCfg.length ? parseFloat(rewardCfg[0].value) : 0;
-        if (rewardAmount > 0) {
-          await conn.execute(
-            `INSERT INTO recommendation_rewards (inviter_id, invitee_id, reward_amount, status, created_at)
-             VALUES (?, ?, ?, 1, NOW())`,
-            [agent.recommender_id, agent.user_id, rewardAmount]
-          );
-        }
+        const giftAccounts = levelCfg.length ? parseInt(levelCfg[0].gift_accounts || 0) : 0;
+        await conn.execute(
+          'UPDATE agents SET gift_accounts_dr = ?, gift_used = 0 WHERE user_id = ?',
+          [giftAccounts, agent.user_id]
+        );
       }
 
       // 5. 创建或更新 teams 记录
@@ -289,14 +302,14 @@ const Agent = {
         [upgrade.to_level, adminId, upgrade.user_id]
       );
 
-      // 4. 初始化新等级拿货名额（gift_accounts_dr = agent_levels.gift_accounts）
+      // 4. 初始化新等级赠送名额（gift_accounts_dr = 新等级配置，gift_used 重置为0）
       const [levelRows] = await conn.query(
         'SELECT gift_accounts FROM agent_levels WHERE level = ? LIMIT 1',
         [upgrade.to_level]
       );
       if (levelRows.length && levelRows[0].gift_accounts > 0) {
         await conn.execute(
-          'UPDATE agents SET gift_accounts_dr = ? WHERE user_id = ?',
+          'UPDATE agents SET gift_accounts_dr = ?, gift_used = 0 WHERE user_id = ?',
           [levelRows[0].gift_accounts, upgrade.user_id]
         );
       }

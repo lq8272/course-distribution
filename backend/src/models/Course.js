@@ -50,19 +50,38 @@ const Course = {
     return rows[0] || null;
   },
 
-  async getDetail(id, userId = null) {
-    const course = await this.findById(id);
-    if (!course) return null;
-    // 封面图签名 URL（listAdmin 用同样的逻辑）
-    if (course.cover_image) {
+  // 追加签名 URL（内部用）
+  _signCover(course) {
+    if (course && course.cover_image) {
       if (course.cover_image.startsWith('images/') || course.cover_image.startsWith('videos/')) {
         course.cover_image_signed_url = videoService.createSignedUrlSync(course.cover_image) || course.cover_image;
       } else {
         course.cover_image_signed_url = course.cover_image;
       }
     }
-    // video_key 始终返回给前端（用于按需刷新签名 URL，前端调 videoApi.playUrl(video_key)）
-    // video_url 策略：免费课登录可看；已购可看；未购付费课不可看
+    return course;
+  },
+
+  // 根据 video_key 生成签名 URL
+  _signVideoKey(videoKey) {
+    if (!videoKey) return null;
+    if (!videoService.isConfigured()) return videoKey;
+    if (videoKey.endsWith('.m3u8')) {
+      return videoService.createSignedUrlSync(videoKey);
+    }
+    return videoService.createSignedUrlSync(videoKey);
+  },
+
+  async getDetail(id, userId = null) {
+    const course = await this.findById(id);
+    if (!course) return null;
+    this._signCover(course);
+
+    // 查询关联视频列表
+    const videos = await this.getVideosByCourseId(id);
+
+    // video_key/video_url 策略：视频列表已完整返回，前端按需请求签名 URL
+    // 未登录/未购买用户：只返回 is_preview=1 的试看视频
     if (userId) {
       const [bought, pending] = await Promise.all([
         db.query('SELECT id FROM orders WHERE user_id = ? AND course_id = ? AND status IN (1,2,3) LIMIT 1', [userId, id]),
@@ -70,29 +89,14 @@ const Course = {
       ]);
       course.is_bought = bought.length > 0;
       course.has_pending_order = pending.length > 0;
-      const isFree = course.is_free === 1;
-      if (!course.is_bought && !isFree) {
-        course.video_url = null; // 未购付费课：无权观看
-        course.video_key = null; // video_key 也不暴露
-      } else {
-        // 已购或免费课，video_url 走传统签名（兼容旧视频），video_key 单独暴露供前端按需调 play-url
-        if (course.video_url) {
-          course.video_url = videoService.createSignedUrlSync(course.video_url) || course.video_url;
-        }
-        // video_key 保持原始值，前端用 videoApi.playUrl(video_key) 获取签名播放内容
-      }
+      // 已购/免费/管理员：返回全部可用视频；未购：返回全部可用视频（购买前可见列表）
+      course.videos = videos.filter(v => v.video_status === 2);
     } else {
-      // 未登录用户：仅免费课可预览（付费课 video_url/video_key 置空）
-      if (course.is_free !== 1) {
-        course.video_url = null;
-        course.video_key = null;
-      } else {
-        if (course.video_url) {
-          course.video_url = videoService.createSignedUrlSync(course.video_url) || course.video_url;
-        }
-      }
+      // 未登录：返回全部可用视频（购买前可见列表）
+      course.videos = videos.filter(v => v.video_status === 2);
     }
-    // 追加佣金比例字段（差额返佣：L2=L2_rate-L1_rate, L3=L3_rate-L2_rate）
+
+    // 追加佣金比例
     const rateRows = await db.query(
       "SELECT level, rebate_rate FROM agent_levels WHERE level IN ('DR','DISTRIBUTORDR','MXJ','DISTRIBUTORMXJ','CJHH','DISTRIBUTORCJHH')"
     );
@@ -107,14 +111,28 @@ const Course = {
     return course;
   },
 
+  // 查询课程的全部视频
+  async getVideosByCourseId(courseId) {
+    const rows = await db.query(
+      'SELECT id, course_id, title, description, video_key, video_url, video_status, duration, sort, is_preview, created_at, updated_at FROM course_videos WHERE course_id = ? ORDER BY sort ASC, id ASC',
+      [courseId]
+    );
+    // 追加 video_key 的签名 URL
+    rows.forEach(v => {
+      v.video_key_signed_url = this._signVideoKey(v.video_key);
+      v.video_url_signed_url = this._signVideoKey(v.video_url);
+    });
+    return rows;
+  },
+
   async categories() {
     return db.query('SELECT * FROM course_categories WHERE is_show = 1 ORDER BY sort ASC, id ASC');
   },
 
   async create(data) {
-    const { title, description, cover_image, video_url, video_key, price, is_free, category_id, sort } = data;
+    const { title, description, cover_image, video_url, video_key, price, is_free, category_id, sort, is_distribution, is_hot, hot_commission_rate, videos } = data;
     const r = await db.execute(
-      'INSERT INTO courses (title, description, cover_image, video_url, video_key, price, is_free, category_id, sort, is_distribution, is_hot, hot_commission_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO courses (title, description, cover_image, video_url, video_key, price, original_price, is_free, category_id, sort, is_distribution, is_hot, hot_commission_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [
         title ?? '',
         description ?? '',
@@ -122,28 +140,91 @@ const Course = {
         video_url ?? '',
         video_key ?? '',
         price ?? 0,
+        data.original_price ?? 0,
         is_free ? 1 : 0,
         category_id ?? null,
         sort ?? 0,
-        (is_distribution || is_hot) ? 1 : 0,  // 爆款课天然分销
+        (is_distribution || is_hot) ? 1 : 0,
         is_hot ? 1 : 0,
         is_hot ? (hot_commission_rate ?? 0) : 0,
       ]
     );
-    return r.insertId;
+    const courseId = r.insertId;
+    // 批量写入视频记录
+    if (Array.isArray(videos) && videos.length) {
+      await this.createVideos(courseId, videos);
+    }
+    return courseId;
   },
 
   async update(id, data) {
     const fields = [];
     const vals = [];
-    ['title','description','cover_image','video_url','video_key','price','is_free','category_id','sort','is_show','is_distribution','is_hot','hot_commission_rate'].forEach(k => {
+    ['title','description','cover_image','video_url','video_key','price','original_price','is_free','category_id','sort','is_show','is_distribution','is_hot','hot_commission_rate'].forEach(k => {
       if (data[k] !== undefined) { fields.push(`${k} = ?`); vals.push(data[k]); }
     });
-    // 爆款课强制 is_distribution = 1
     if (data.is_hot) { fields.push('is_distribution = 1'); }
     if (!fields.length) return;
     vals.push(id);
-    return db.execute(`UPDATE courses SET ${fields.join(',')} WHERE id = ?`, vals);
+    await db.execute(`UPDATE courses SET ${fields.join(',')} WHERE id = ?`, vals);
+    // 全量替换视频列表
+    if (data.videos !== undefined) {
+      await this.replaceVideos(id, data.videos);
+    }
+  },
+
+  // ========== course_videos CRUD ==========
+
+  // 批量创建视频记录（课程创建时）
+  async createVideos(courseId, videos) {
+    if (!Array.isArray(videos) || !videos.length) return;
+    for (const v of videos) {
+      await db.execute(
+        'INSERT INTO course_videos (course_id, title, description, video_key, video_status, duration, sort, is_preview) VALUES (?,?,?,?,?,?,?,?)',
+        [courseId, v.title ?? '', v.description ?? '', v.video_key ?? '', v.video_status ?? 0, v.duration ?? 0, v.sort ?? 0, v.is_preview ? 1 : 0]
+      );
+    }
+  },
+
+  // 全量替换视频列表（课程编辑时）
+  async replaceVideos(courseId, videos) {
+    // 删除旧记录（同时删除七牛文件需要单独处理，这里只删数据库）
+    const [existing] = await db.query('SELECT video_key FROM course_videos WHERE course_id = ?', [courseId]);
+    await db.execute('DELETE FROM course_videos WHERE course_id = ?', [courseId]);
+    // 重新插入
+    if (Array.isArray(videos) && videos.length) {
+      for (const v of videos) {
+        await db.execute(
+          'INSERT INTO course_videos (course_id, title, description, video_key, video_url, video_status, duration, sort, is_preview) VALUES (?,?,?,?,?,?,?,?,?)',
+          [
+            courseId,
+            v.title ?? '',
+            v.description ?? '',
+            v.video_key ?? '',
+            v.video_url ?? '',
+            v.video_status ?? 0,
+            v.duration ?? 0,
+            v.sort ?? 0,
+            v.is_preview ? 1 : 0,
+          ]
+        );
+      }
+    }
+  },
+
+  // 根据 video_key 查找 course_videos 记录
+  async findVideoByKey(videoKey) {
+    const rows = await db.query('SELECT * FROM course_videos WHERE video_key = ? LIMIT 1', [videoKey]);
+    return rows[0] || null;
+  },
+
+  // 更新 course_videos 的 video_url 和 video_status（转码完成后回调）
+  async updateVideoUrl(videoKey, videoUrl, duration) {
+    const fields = ['video_url = ?', 'video_status = 2'];
+    const vals = [videoUrl];
+    if (duration && duration > 0) fields.push('duration = ?'), vals.push(duration);
+    vals.push(videoKey);
+    return db.execute(`UPDATE course_videos SET ${fields.join(',')} WHERE video_key = ?`, vals);
   },
 
   async listAdmin({ page = 1, pageSize = 20, keyword }) {
@@ -155,17 +236,15 @@ const Course = {
       params.push(`%${keyword}%`, `%${keyword}%`);
     }
     const [rows, total] = await Promise.all([
-      db.query(`SELECT * FROM courses ${where} ORDER BY sort DESC, id DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]),
+      db.query(`SELECT c.*, (SELECT COUNT(*) FROM course_videos cv WHERE cv.course_id = c.id) as video_count FROM courses c ${where} ORDER BY c.sort DESC, c.id DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]),
       db.query(`SELECT COUNT(*) as cnt FROM courses ${where}`, params),
     ]);
-    // 封面图转签名 URL（兼容存 key 和存完整 URL 两种情况）
     rows.forEach(c => {
       if (c.cover_image) {
         if (c.cover_image.startsWith('images/') || c.cover_image.startsWith('videos/') ||
             c.cover_image.startsWith('/images/') || c.cover_image.startsWith('/videos/')) {
           c.cover_image_signed_url = videoService.createSignedUrlSync(c.cover_image) || c.cover_image;
         } else {
-          // 已经是完整 URL（旧的），保持原样
           c.cover_image_signed_url = c.cover_image;
         }
       }

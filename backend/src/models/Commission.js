@@ -23,14 +23,14 @@ db.query('SELECT `key`, value FROM configs WHERE `key` IN (?,?,?,?,?,?,?,?,?)', 
 
 const Commission = {
   /**
-   * 订单确认后自动结算佣金 — 差额模式
+   * 订单确认后自动结算佣金 — 差价模式
    *
-   * 方案 5.1 差额模式说明：
-   * - L1 直推达人：拿课程价格 × L1_rate
-   * - L2 上级梦想家：拿课程价格 × (L2_rate - L1_rate)，仅当 L2_rate > L1_rate
-   * - L3 上上级超合伙：拿课程价格 × (L3_rate - L2_rate)，仅当 L3_rate > L2_rate
-   *
-   * 佣金直接写入 status=1（已入账/可提现），不在事务外可见中间状态。
+   * 业务逻辑：
+   * - 爆款课程：L1 直推人获得 hot_commission_rate% 的佣金（不走差价逻辑）
+   * - 普通课程：L1 直推人获得差价佣金 = 课程售价 - 该等级拿货价
+   *   （赠送名额内：拿货价=0，差价=课程全价；差价购买后：拿货价=拿货价，差价=差价）
+   * - L2/L3 不获得销售佣金
+   * - 推荐奖励在 approve 时已结算，不在此处处理
    *
    * @param {number} orderId - 订单 ID
    * @param {object} [existingConn] - 可选，若传入则复用该连接的事务（确保原子性）
@@ -78,20 +78,20 @@ const Commission = {
         throw e;
       }
 
-      // 4. 爆款课程：独立佣金体系，单层直推，不追溯上级
+      // 5. 爆款课程：独立佣金体系，单层直推
       if (course[0].is_hot === 1) {
         const hotRate = parseFloat(course[0].hot_commission_rate) || 0;
+        let amount = 0;
         if (hotRate > 0 && agentsChain.L1) {
-          const amount = Math.round(price * hotRate / 100 * 100) / 100;
+          amount = Math.round(price * hotRate / 100 * 100) / 100;
           if (amount > 0) {
             await conn.execute(
-              `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-               VALUES (?, ?, 1, 'HOT_SALES', ?, 1, NOW())`,
-              [agentsChain.L1.user_id, orderId, amount]
+              `INSERT INTO commissions (user_id, order_id, level, type, amount, profit_margin, status, created_at)
+               VALUES (?, ?, 1, 'HOT_SALES', ?, ?, 1, NOW())`,
+              [agentsChain.L1.user_id, orderId, amount, amount]
             );
           }
         }
-        // 爆款课无推荐奖励，跳过普通推荐奖励逻辑
         await conn.execute(
           'UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id = ?',
           [orderId]
@@ -101,99 +101,61 @@ const Commission = {
         return [{ userId: agentsChain.L1?.user_id, level: 1, amount: amount || 0 }];
       }
 
-      // 5. 读取各级分销商的 rebate_rate（从 agent_levels 表动态获取）
-      const levelRates = { DR: 0, MXJ: 0, CJHH: 0 };
-      const [rateRows] = await conn.query(
-        "SELECT level, rebate_rate FROM agent_levels WHERE level IN ('DR','DISTRIBUTORDR','MXJ','DISTRIBUTORMXJ','CJHH','DISTRIBUTORCJHH')"
-      );
-      rateRows.forEach(r => { levelRates[r.level.toUpperCase()] = parseFloat(r.rebate_rate) || 0; });
-
-      const settlements = [];
-
-      // 6. 计算并写入每层佣金（SALES 类型）— 差额返佣模式
-      //    L1 达人：拿自己等级对应 rebate_rate × 课程价格
-      //    L2 梦想家：拿 (L2_rate - L1_rate) × 课程价格，仅当差值为正
-      //    L3 超合伙：拿 (L3_rate - L2_rate) × 课程价格，仅当差值为正
+      // 6. 普通课程差价佣金：只有 L1 直推人获得
+      //    差价 = 课程售价 - L1 等级的拿货价（从 agent_levels.purchase_price 读取）
+      //    source_type='gift'：拿货价=0，差价=课程全价（平台赠送名额）
+      //    source_type='purchase'：拿货价=agent_levels.purchase_price，差价=课程售价-拿货价
       if (agentsChain.L1) {
-        const rate1 = levelRates[agentsChain.L1.level.toUpperCase()] ?? 0;
-        const amount = Math.round(price * rate1 * 100) / 100;
-        if (amount > 0) {
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 1, 'SALES', ?, 1, NOW())`,
-            [agentsChain.L1.user_id, orderId, amount]
-          );
-          settlements.push({ userId: agentsChain.L1.user_id, level: 1, amount });
-        }
-      }
-
-      if (agentsChain.L2) {
-        const rate2 = levelRates[agentsChain.L2.level.toUpperCase()] ?? 0;
-        const rate1 = levelRates[agentsChain.L1?.level.toUpperCase()] ?? 0;
-        const diffRate = Math.max(0, rate2 - rate1);
-        const amount = Math.round(price * diffRate * 100) / 100;
-        if (amount > 0) {
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 2, 'SALES', ?, 1, NOW())`,
-            [agentsChain.L2.user_id, orderId, amount]
-          );
-          settlements.push({ userId: agentsChain.L2.user_id, level: 2, amount });
-        }
-      }
-
-      if (agentsChain.L3) {
-        const rate3 = levelRates[agentsChain.L3.level.toUpperCase()] ?? 0;
-        const rate2 = levelRates[agentsChain.L2?.level.toUpperCase()] ?? 0;
-        const diffRate = Math.max(0, rate3 - rate2);
-        const amount = Math.round(price * diffRate * 100) / 100;
-        if (amount > 0) {
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 3, 'SALES', ?, 1, NOW())`,
-            [agentsChain.L3.user_id, orderId, amount]
-          );
-          settlements.push({ userId: agentsChain.L3.user_id, level: 3, amount });
-        }
-      }
-
-      // 6. 推荐奖励：direct_agent_id 对应的直推分销商获得奖励
-      //    dr_dr / mxj_dr / cjhh_dr 为百分比（30/50/70），其余为固定金额
-      if (agentsChain.L1) {
-        const [buyerAgent] = await conn.query(
-          'SELECT level FROM agents WHERE user_id = ? AND status = 1 LIMIT 1',
-          [o.user_id]
+        // 读取 L1 的拿货价
+        const [levelCfg] = await conn.query(
+          'SELECT purchase_price FROM agent_levels WHERE level = ? LIMIT 1',
+          [agentsChain.L1.level]
         );
-        const buyerLevel = buyerAgent.length ? buyerAgent[0].level : 'DR';
-        const cfgKey = `referral_reward_${agentsChain.L1.level.toLowerCase()}_${buyerLevel.toLowerCase()}`;
-        const [cfg] = await conn.query(
-          "SELECT value FROM configs WHERE `key` = ? LIMIT 1",
-          [cfgKey]
+        const purchasePrice = levelCfg.length ? parseFloat(levelCfg[0].purchase_price || 0) : 0;
+
+        // 读取订单来源（赠送名额 or 差价购买）
+        const [orderInfo] = await conn.query(
+          'SELECT agent_account_id FROM orders WHERE id = ? LIMIT 1',
+          [orderId]
         );
-        const referralReward = parseFloat(cfg[0]?.value || 0);
-        if (referralReward > 0) {
-          const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
-          const DR_APPLY_FEE = 4980;
-          const amount = isPercent
-            ? Math.round(DR_APPLY_FEE * referralReward / 100 * 100) / 100
-            : referralReward;
+        let sourceType = 'gift';
+        if (orderInfo.length && orderInfo[0].agent_account_id) {
+          const [accountInfo] = await conn.query(
+            'SELECT source_type FROM agent_accounts WHERE id = ? LIMIT 1',
+            [orderInfo[0].agent_account_id]
+          );
+          if (accountInfo.length) sourceType = accountInfo[0].source_type;
+        }
+
+        // 计算差价
+        const costPrice = sourceType === 'gift' ? 0 : purchasePrice;
+        const profitMargin = Math.max(0, price - costPrice);
+        const amount = Math.round(profitMargin * 100) / 100;
+
+        if (amount > 0) {
           await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 1, 'REFERRAL', ?, 1, NOW())`,
-            [agentsChain.L1.user_id, orderId, amount]
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, profit_margin, status, created_at)
+             VALUES (?, ?, 1, 'SALES', ?, ?, 1, NOW())`,
+            [agentsChain.L1.user_id, orderId, amount, profitMargin]
           );
         }
+        await conn.execute(
+          'UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id = ?',
+          [orderId]
+        );
+        if (shouldCommit) await conn.commit();
+        if (shouldRelease) conn.release();
+        return [{ userId: agentsChain.L1.user_id, level: 1, amount }];
       }
 
-      // 7. 标记订单佣金已结算（幂等）
+      // 无 L1 分销商（平台引流订单）：直接标记已结算，不发佣金
       await conn.execute(
         'UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id = ?',
         [orderId]
       );
-
       if (shouldCommit) await conn.commit();
       if (shouldRelease) conn.release();
-      return settlements;
+      return [];
     } catch (e) {
       await conn.rollback();  // 空事务回滚无害，始终回滚确保连接不泄漏
       if (shouldRelease) conn.release();
@@ -309,10 +271,13 @@ const Commission = {
 
     // 2. 批量读取 agent_levels（单次查询，全量缓存）
     const [levelRows] = await conn.query(
-      "SELECT level, rebate_rate FROM agent_levels"
+      "SELECT level, rebate_rate, purchase_price FROM agent_levels"
     );
     const levelRates = {};
-    levelRows.forEach(r => { levelRates[r.level] = parseFloat(r.rebate_rate) || 0; });
+    levelRows.forEach(r => {
+      levelRates[r.level] = parseFloat(r.rebate_rate) || 0;
+      levelRates[`${r.level}_price`] = parseFloat(r.purchase_price) || 0;
+    });
 
     // 3. 收集所有需查询的分销商 user_id（来自 direct_agent_id）
     const agentUserIds = [...new Set(orders.map(o => o.direct_agent_id).filter(Boolean))];
@@ -335,92 +300,42 @@ const Commission = {
       const chain = buildAgentChain(agentMap, o.direct_agent_id);
       const price = parseFloat(o.price);
 
-      // 爆款课程：独立佣金体系，单层直推，type=HOT_SALES
+      // 爆款课程：HOT_SALES 类型佣金
       if (o.is_hot === 1) {
         const hotRate = parseFloat(o.hot_commission_rate) || 0;
         if (hotRate > 0 && chain.L1) {
           const amount = Math.round(price * hotRate / 100 * 100) / 100;
           if (amount > 0) {
             await conn.execute(
-              `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-               VALUES (?, ?, 1, 'HOT_SALES', ?, 1, NOW())`,
-              [chain.L1.user_id, o.id, amount]
+              `INSERT INTO commissions (user_id, order_id, level, type, amount, profit_margin, status, created_at)
+               VALUES (?, ?, 1, 'HOT_SALES', ?, ?, 1, NOW())`,
+              [chain.L1.user_id, o.id, amount, amount]
             );
-            settlements.push({ userId: chain.L1.user_id, orderId: o.id, level: 1, amount });
           }
         }
-        continue; // 爆款课不参与普通佣金计算
+        continue;
       }
 
-      // L1
+      // 普通课程差价佣金：只有 L1 获得
       if (chain.L1) {
-        const amount = Math.round(price * (levelRates[chain.L1.level] ?? 0) * 100) / 100;
+        const purchasePrice = levelRates[`${chain.L1.level}_price`] || 0;
+        const sourceType = o.agent_account_id ? 'purchase' : 'gift';
+        const costPrice = sourceType === 'gift' ? 0 : purchasePrice;
+        const profitMargin = Math.max(0, price - costPrice);
+        const amount = Math.round(profitMargin * 100) / 100;
         if (amount > 0) {
           await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 1, 'SALES', ?, 1, NOW())`,
-            [chain.L1.user_id, o.id, amount]
-          );
-          settlements.push({ userId: chain.L1.user_id, orderId: o.id, level: 1, amount });
-        }
-      }
-      // L2
-      if (chain.L2) {
-        const rate2 = levelRates[chain.L2.level] ?? 0;
-        const rate1 = levelRates[chain.L1?.level] ?? 0;
-        const diffRate = Math.max(0, rate2 - rate1);
-        const amount = Math.round(price * diffRate * 100) / 100;
-        if (amount > 0) {
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 2, 'SALES', ?, 1, NOW())`,
-            [chain.L2.user_id, o.id, amount]
-          );
-          settlements.push({ userId: chain.L2.user_id, orderId: o.id, level: 2, amount });
-        }
-      }
-      // L3
-      if (chain.L3) {
-        const rate3 = levelRates[chain.L3.level] ?? 0;
-        const rate2 = levelRates[chain.L2?.level] ?? 0;
-        const diffRate = Math.max(0, rate3 - rate2);
-        const amount = Math.round(price * diffRate * 100) / 100;
-        if (amount > 0) {
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 3, 'SALES', ?, 1, NOW())`,
-            [chain.L3.user_id, o.id, amount]
-          );
-          settlements.push({ userId: chain.L3.user_id, orderId: o.id, level: 3, amount });
-        }
-      }
-      // 推荐奖励
-      if (chain.L1) {
-        const buyerLevel = agentMap[o.user_id]?.level || 'DR';
-        const cfgKey = `referral_reward_${chain.L1.level.toLowerCase()}_${buyerLevel.toLowerCase()}`;
-        // 推荐奖励配置已在模块加载时校验，此处查单条
-        const [cfg] = await conn.query(
-          "SELECT value FROM configs WHERE `key` = ? LIMIT 1", [cfgKey]
-        );
-        const referralReward = parseFloat(cfg[0]?.value || 0);
-        if (referralReward > 0) {
-          const isPercent = ['referral_reward_dr_dr', 'referral_reward_mxj_dr', 'referral_reward_cjhh_dr'].includes(cfgKey);
-          const DR_APPLY_FEE = 4980;
-          const amount = isPercent
-            ? Math.round(DR_APPLY_FEE * referralReward / 100 * 100) / 100
-            : referralReward;
-          await conn.execute(
-            `INSERT INTO commissions (user_id, order_id, level, type, amount, status, created_at)
-             VALUES (?, ?, 1, 'REFERRAL', ?, 1, NOW())`,
-            [chain.L1.user_id, o.id, amount]
+            `INSERT INTO commissions (user_id, order_id, level, type, amount, profit_margin, status, created_at)
+             VALUES (?, ?, 1, 'SALES', ?, ?, 1, NOW())`,
+            [chain.L1.user_id, o.id, amount, profitMargin]
           );
         }
       }
     }
 
-    // 5. 批量标记已结算
-    if (settlements.length) {
-      const settledOrderIds = [...new Set(settlements.map(s => s.orderId))];
+    // 批量标记已结算（所有订单都标记，包括无佣金的）
+    const settledOrderIds = orders.map(o => o.id);
+    if (settledOrderIds.length) {
       await conn.execute(
         `UPDATE orders SET commission_settled = 1, confirm_time = NOW() WHERE id IN (${settledOrderIds.map(() => '?').join(',')})`,
         settledOrderIds
